@@ -28,5 +28,15 @@
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/raycalrui/ShortcutStats/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Z2cuwqUccV9aGPoa5zxKU4VrllXPZFyBIK1UgFgzaWk=</string>
+	<key>SUEnableAutomaticChecks</key><false/>
+	<key>SUAutomaticallyUpdate</key><false/>
+	<key>SUAllowsAutomaticUpdates</key><false/>
+	<key>SUScheduledCheckInterval</key><integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key><true/>
+	<key>SURequireSignedFeed</key><true/>
 </dict>
 </plist>

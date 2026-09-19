@@ -5,6 +5,11 @@
 	};
 	"objectVersion" = 56;
 	"objects" = {
+        "000000000000000000000095" = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
+        "000000000000000000000096" = { isa = PBXBuildFile; fileRef = "000000000000000000000095"; };
+        "000000000000000000000097" = { isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/sparkle-project/Sparkle"; requirement = { kind = exactVersion; version = 2.10.0; }; };
+        "000000000000000000000098" = { isa = XCSwiftPackageProductDependency; package = "000000000000000000000097"; productName = Sparkle; };
+        "000000000000000000000099" = { isa = PBXBuildFile; productRef = "000000000000000000000098"; };
         "000000000000000000000094" = { "isa" = "PBXFileReference"; "lastKnownFileType" = "text.xcconfig"; "path" = "Signing.xcconfig"; "sourceTree" = "<group>"; };
         "000000000000000000000092" = { "isa" = "PBXFileReference"; "lastKnownFileType" = "sourcecode.swift"; "path" = "TrackingHealth.swift"; "sourceTree" = "<group>"; };
         "000000000000000000000093" = { "isa" = "PBXBuildFile"; "fileRef" = "000000000000000000000092"; };
@@ -69,7 +74,7 @@
 		};
 		"000000000000000000000028" = {
 			"isa" = "PBXGroup";
-			"children" = ("000000000000000000000092", "00000000000000000000000A", "00000000000000000000000B", "00000000000000000000000C");
+			"children" = ("000000000000000000000095", "000000000000000000000092", "00000000000000000000000A", "00000000000000000000000B", "00000000000000000000000C");
 			"path" = "Sources/ShortcutStats";
 			"sourceTree" = "<group>";
 		};
@@ -93,13 +98,13 @@
 		"000000000000000000000032" = {
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
-			"files" = ("000000000000000000000093", "000000000000000000000014", "000000000000000000000015", "000000000000000000000016");
+			"files" = ("000000000000000000000096", "000000000000000000000093", "000000000000000000000014", "000000000000000000000015", "000000000000000000000016");
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
 		"000000000000000000000033" = {
 			"isa" = "PBXFrameworksBuildPhase";
 			"buildActionMask" = 2147483647;
-			"files" = ();
+			"files" = ("000000000000000000000099");
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
 		"000000000000000000000034" = {
@@ -139,8 +144,8 @@
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"COMBINE_HIDPI_IMAGES" = "YES";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
-				"CURRENT_PROJECT_VERSION" = "1";
-				"MARKETING_VERSION" = "0.1.0";
+				"CURRENT_PROJECT_VERSION" = "2";
+				"MARKETING_VERSION" = "0.1.1";
 			};
 		};
 		"00000000000000000000003D" = {
@@ -172,8 +177,8 @@
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"COMBINE_HIDPI_IMAGES" = "YES";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
-				"CURRENT_PROJECT_VERSION" = "1";
-				"MARKETING_VERSION" = "0.1.0";
+				"CURRENT_PROJECT_VERSION" = "2";
+				"MARKETING_VERSION" = "0.1.1";
 			};
 		};
 		"000000000000000000000046" = {
@@ -194,6 +199,7 @@
 			"buildPhases" = ("000000000000000000000032", "000000000000000000000033", "000000000000000000000034");
 			"buildRules" = ();
 			"dependencies" = ();
+            packageProductDependencies = ("000000000000000000000098");
 			"name" = "ShortcutStats";
 			"productName" = "ShortcutStats";
 			"productReference" = "00000000000000000000001E";
@@ -217,7 +223,8 @@
 			"knownRegions" = ("en", "Base", "zh-Hans");
 			"mainGroup" = "00000000000000000000002B";
 			"productRefGroup" = "00000000000000000000002A";
-			"projectDirPath" = "";
+			packageReferences = ("000000000000000000000097");
+            "projectDirPath" = "";
 			"projectRoot" = "";
 			"targets" = ("000000000000000000000050");
 		};

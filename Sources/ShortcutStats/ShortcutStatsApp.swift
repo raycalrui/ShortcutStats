@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.item.button?.toolTip = "ShortcutStats · " + state.title
             self?.item.button?.image = NSImage(systemSymbolName: state.symbol, accessibilityDescription: state.title)
         }
+        _ = UpdateController.shared
         monitor.restoreTracking()
         if !loginLaunch { showWindow() }
     }
@@ -59,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct Dashboard: View {
     @ObservedObject var monitor: Monitor
+    @ObservedObject private var updater = UpdateController.shared
     private var days: Int { monitor.days }
     private var appID: String { monitor.selectedAppID }
 
@@ -140,16 +142,20 @@ struct Dashboard: View {
             if let message = monitor.errorMessage { Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             if let historyError = monitor.historyError { Text(historyError).font(.caption).foregroundStyle(.red) }
             Divider()
-            HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("仅统计含 ⌘ / ⌥ / ⌃ 的组合键，忽略长按重复。\n按前台应用归类；键位按美式 QWERTY 标记。数据仅保存在本机。")
                     .font(.caption).foregroundStyle(.secondary)
+                HStack {
                 Spacer()
+                Button("检查更新…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
                 Button("中断记录") { monitor.showInterruptions = true }
                 SettingsLink { Text("设置") }
                 Button("权限设置") {
                     monitor.openPermissionSettings()
                 }
                 Button("退出") { NSApp.terminate(nil) }
+                }
             }
         }.padding(28).frame(minWidth: 650, minHeight: 430)
             .sheet(isPresented: $monitor.showInterruptions) {
@@ -185,12 +191,13 @@ private struct StartupSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("启动设置").font(.title2.bold())
+            Text("设置").font(.title2.bold())
             Toggle("登录时启动 ShortcutStats", isOn: Binding(
                 get: { login.enabled }, set: { login.setEnabled($0) }
             ))
             Text("登录后在菜单栏后台运行，不弹出主窗口。上次手动暂停后，重新启动仍保持暂停。")
                 .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(login.statusText).font(.callout)
             if login.needsApproval {
                 Button("打开系统登录项设置") { SMAppService.openSystemSettingsLoginItems() }
@@ -200,8 +207,11 @@ private struct StartupSettings: View {
             }
             Text("建议先将 App 放到应用程序文件夹再开启，避免登录时运行构建目录中的旧副本。")
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider()
+            UpdateSettings()
         }
-        .padding(24).frame(width: 430)
+        .padding(24).frame(width: 480)
         .onAppear { login.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             login.refresh()

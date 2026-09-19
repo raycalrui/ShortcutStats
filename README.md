@@ -1,6 +1,6 @@
 # ShortcutStats
 
-本地 Mac 快捷键频率统计工具，SwiftUI + Core Graphics，无第三方依赖。macOS 14 及以上。
+本地 Mac 快捷键频率统计工具，SwiftUI + Core Graphics，使用 Sparkle 提供签名更新。macOS 14 及以上。
 
 A local-first Mac app that tracks keyboard shortcut usage, built with SwiftUI and Core Graphics. No third-party dependencies. Requires macOS 14 or later.
 
@@ -169,3 +169,35 @@ Debug and Release share `Configuration/Signing.xcconfig`, with ad-hoc signing as
 从 ad-hoc 切换开发签名后，可能需要为当前 App 再授权一次输入监控。后续应使用同一 Bundle ID、签名身份和固定运行位置；是否保留授权仍需在本机重新构建后验证。
 
 Switching from ad-hoc to development signing may require granting Input Monitoring permission again. Keep the same bundle identifier, signing identity, and launch location for subsequent builds. Permission persistence must still be verified after rebuilding on your Mac.
+
+
+## 安装与应用内更新 / Installation and in-app updates
+
+从 [Releases](https://github.com/raycalrui/ShortcutStats/releases) 下载 `.dmg`，打开后将 ShortcutStats 拖到 Applications，再从应用程序文件夹运行。macOS 14+，安装包包含 Apple Silicon 和 Intel 架构。请勿直接从 DMG 运行。当前为未经 Apple 公证的预发布版；首次打开被拦截时请参阅 [Apple 官方说明](https://support.apple.com/102445)。
+
+Download the `.dmg` from [Releases](https://github.com/raycalrui/ShortcutStats/releases), open it and drag ShortcutStats into Applications. Launch it from Applications, not the mounted image. Requires macOS 14+; includes Apple Silicon and Intel binaries. This preview is not notarized by Apple; see [Apple's instructions](https://support.apple.com/102445) if the first launch is blocked.
+
+点击主窗口或设置中的「检查更新…」，由 Sparkle 显示新版并在确认后下载、验证、安装和重启。设置中可开启每天自动检查，默认关闭；当前 0.x 版本接收预发布版和正式版。检查更新会请求 GitHub，联网方可看到常规连接信息（例如 IP 地址），但不上传快捷键统计。更新列表和安装包均验证 EdDSA 签名。
+
+Click **检查更新…** (Check for Updates) in the dashboard or settings. Sparkle presents an available update and downloads, verifies, installs and relaunches after confirmation. Daily automatic checks are optional and off by default. The 0.x series accepts preview and stable releases. Checking contacts GitHub, which receives normal connection metadata such as your IP address, but no shortcut statistics. Both the feed and update archive are EdDSA-verified.
+
+v0.1.0 尚未内置更新组件，因此需要手动安装一次 v0.1.1 或更高版本。替换签名或安装新版后可能需要重新授予输入监控权限；历史统计仍保留在原位置。
+
+v0.1.0 does not include an updater, so install v0.1.1 or later manually once. Replacing a signed build or updating may require Input Monitoring permission again; historical statistics stay in their existing location.
+
+### 发布维护 / Release maintenance
+
+首次构建需要联网解析 Sparkle 2.10.0；依赖已通过 Package.resolved 锁定。公开 ad-hoc 包按以下顺序准备（不要覆盖本地签名配置）：
+
+The first build needs network access to resolve Sparkle 2.10.0, pinned in Package.resolved. Prepare a public ad-hoc build as follows without modifying local signing configuration:
+
+```sh
+zsh scripts/build.sh 'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= ENABLE_HARDENED_RUNTIME=NO
+zsh scripts/sign-ad-hoc-release.sh dist/ShortcutStats.app
+zsh scripts/package-dmg.sh
+zsh scripts/prepare-update.sh v0.1.1 dist/ShortcutStats-0.1.1.dmg .build/Xcode/SourcePackages/artifacts/sparkle/Sparkle/bin beta
+```
+
+每次发布先递增版本号和构建号。更新签名私钥仅存于钥匙串 account `cc.raycal.ShortcutStats`，保持备份安全，不能提交到 Git。先上传并验证 Release 安装包，再推送生成的 `appcast.xml`。不要手工修改已签名的更新列表；修改后必须重新签名。
+
+Increment both the version and build number for each release. The update-signing private key lives only in the Keychain account `cc.raycal.ShortcutStats`; keep backups secure and never commit it. Upload and verify the release archive before pushing the generated `appcast.xml`. Do not edit a signed feed without re-signing it.

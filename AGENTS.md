@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-- ShortcutStats 是本地运行的 macOS 菜单栏快捷键频率统计工具，使用 SwiftUI、AppKit 和 Core Graphics，无第三方依赖，最低支持 macOS 14。
+- ShortcutStats 是本地运行的 macOS 菜单栏快捷键频率统计工具，使用 SwiftUI、AppKit 和 Core Graphics，除用于签名更新的 Sparkle 外不引入第三方依赖，最低支持 macOS 14。
 - 保持标准 Xcode App 项目结构；不要改回 Swift Package，也不要为小改动引入项目生成工具或替换技术栈。
 - 优先小范围、可验证的修改。诊断请求只提供发现与证据，除非用户同时要求修复。
 - README 保持逐段中英对照；功能、使用方式或限制发生变化时，同步更新两种语言。
@@ -55,7 +55,7 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 - 当前仅统计含 Command、Option 或 Control 的 key-down，Shift 可作为附加修饰键；忽略系统自动重复，手动重复分别计数。
 - 当前按美式 QWERTY 物理键位命名。单键、仅 Shift、媒体键、Fn 特殊操作及多段快捷键语义不属于已支持范围。
 - 应用归属指按键时的前台应用，不等于实际处理快捷键的应用；计数代表按键尝试，不证明命令执行成功。
-- 不保存输入正文、普通打字、按键顺序、窗口标题或网页地址，不添加遥测、网络上传或账号系统。
+- 不保存输入正文、普通打字、按键顺序、窗口标题或网页地址，不添加遥测、统计数据上传或账号系统。检查更新仅访问 GitHub 上的签名更新列表和安装包。
 - 不绕过输入监控权限或安全输入保护，不替用户重置权限数据库。安全输入期间的缺失不得伪装成完整统计。
 - 事件回调保持轻量；避免逐次写盘、扫描菜单、执行耗时 I/O 或频繁刷新整个界面。
 - 扩展统计范围时，先明确计数口径及对隐私、历史排名的影响，再实现并同步文档。
@@ -77,3 +77,13 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 - 提交前运行 `git diff --cached --check`。推送必须在用户授权范围内，不能将一次发布授权视为所有未来发布的授权。
 - 不擅自 force push、创建 Release、上传安装包或改变仓库可见性。
 - 交付时简要说明改动、验证结果和未验证部分；区分本地修改、已提交与已确认推送。
+
+## 发布与更新
+
+- Sparkle 2.10.0 通过 Xcode Swift Package 依赖嵌入；保留 Package.resolved。更新组件负责签名验证、下载、替换和重启，不自行实现安装器。
+- 更新列表和安装包均需 EdDSA 签名；不得关闭 `SURequireSignedFeed` 或 `SUVerifyUpdateBeforeExtraction`。
+- 更新私钥在钥匙串的 `cc.raycal.ShortcutStats` account，不能导出或提交；Info.plist 只保存公钥。
+- 每次发布递增 CFBundleVersion；0.x 接收 beta 和正式频道。自动检查默认关闭，用户可开启；安装必须确认。
+- 构建 ad-hoc 公开包时使用命令行 `ENABLE_HARDENED_RUNTIME=NO CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=`，之后运行 `scripts/sign-ad-hoc-release.sh`。本机开发签名及项目 hardened runtime 默认值保持原样。
+- DMG 用 `scripts/package-dmg.sh` 生成；更新列表用 `scripts/prepare-update.sh` 生成。先上传对应 Release 附件并验证，再推送引用该附件的 appcast，避免用户收到失效下载。
+- 不把 ad-hoc / EdDSA 更新签名等同于 Developer ID 或 Apple 公证。完整安装更新验收用隔离测试副本，避免替换用户正在使用的 App 或真实数据。
