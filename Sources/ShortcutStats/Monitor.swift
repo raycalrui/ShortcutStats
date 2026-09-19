@@ -9,6 +9,18 @@ final class Monitor: ObservableObject {
     @Published var status = "尚未开始"
     @Published var running = false
     @Published var errorMessage: String?
+    @Published var showPermissionHelp = false
+    @Published private(set) var waitingForPermission = false
+    let permissionHelp = "当前进程尚未获得输入监控权限。如果系统设置中已经开启，请先退出并重新打开应用；仍无效时，移除旧条目，再添加当前应用并开启权限。重新编译或使用不同副本后，旧授权可能不再适用。"
+
+    func openPermissionSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+    }
+
+    func revealCurrentApp() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
+
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var timer: Timer?
@@ -48,9 +60,12 @@ final class Monitor: ObservableObject {
             guard let self else { return }
             if self.dirty { self.records = Array(self.counts.values) }
             if Date().timeIntervalSince(self.lastSave) >= 15 { self.save() }
+            if self.waitingForPermission && CGPreflightListenEventAccess() {
+                self.start(requestPermission: false)
+            }
             if self.running {
                 if !CGPreflightListenEventAccess() {
-                    self.stop()
+                    self.stop(persistPause: false)
                     self.status = "输入监控权限已撤销"
                 } else if IsSecureEventInputEnabled() {
                     self.status = "安全输入启用中 · 暂时无法统计"
@@ -68,13 +83,29 @@ final class Monitor: ObservableObject {
         foregroundName = app?.localizedName ?? "Unknown"
     }
 
+    func restoreTracking() {
+        if UserDefaults.standard.bool(forKey: "trackingPaused") {
+            status = "已暂停"
+        } else {
+            start(requestPermission: false)
+        }
+    }
+
     func start(requestPermission: Bool = true) {
+        if requestPermission { UserDefaults.standard.set(false, forKey: "trackingPaused") }
         guard !running, !loadFailed else { return }
-        guard CGPreflightListenEventAccess() else {
-            status = "需要输入监控权限"
-            if requestPermission { _ = CGRequestListenEventAccess() }
+        var authorized = CGPreflightListenEventAccess()
+        if !authorized && requestPermission {
+            authorized = CGRequestListenEventAccess()
+        }
+        guard authorized || CGPreflightListenEventAccess() else {
+            status = "输入监控权限尚未对当前应用生效"
+            waitingForPermission = requestPermission || waitingForPermission
+            if requestPermission { showPermissionHelp = true }
             return
         }
+        waitingForPermission = false
+        showPermissionHelp = false
         let callback: CGEventTapCallBack = { _, type, event, context in
             guard let context else { return Unmanaged.passUnretained(event) }
             let monitor = Unmanaged<Monitor>.fromOpaque(context).takeUnretainedValue()
@@ -102,7 +133,10 @@ final class Monitor: ObservableObject {
         status = "正在统计"
     }
 
-    func stop() {
+    func stop(persistPause: Bool = true) {
+        if persistPause { UserDefaults.standard.set(true, forKey: "trackingPaused") }
+        waitingForPermission = false
+        showPermissionHelp = false
         if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         tap = nil

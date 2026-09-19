@@ -1,11 +1,14 @@
 import SwiftUI
 import AppKit
+import Carbon
+import ServiceManagement
+import Combine
 
 @main
 struct ShortcutStatsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene {
-        Settings { EmptyView() }
+        Settings { StartupSettings() }
     }
 }
 
@@ -13,6 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var item: NSStatusItem!
     private var window: NSWindow!
     private let monitor = Monitor()
+    private var statusSubscription: AnyCancellable?
+    private var loginLaunch = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        loginLaunch = event?.eventID == AEEventID(kAEOpenApplication)
+            && event?.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue == OSType(keyAELaunchedAsLogInItem)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -27,15 +38,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.minSize = NSSize(width: 700, height: 480)
         window.contentView = NSHostingView(rootView: Dashboard(monitor: monitor))
         window.center()
-        monitor.start(requestPermission: false)
-        showWindow()
+        statusSubscription = monitor.$status.sink { [weak self] status in
+            self?.item.button?.toolTip = "ShortcutStats · " + status
+            self?.item.button?.image = NSImage(systemSymbolName:
+                status.contains("权限") || status.contains("无法") ? "exclamationmark.triangle" : "keyboard",
+                accessibilityDescription: status)
+        }
+        monitor.restoreTracking()
+        if !loginLaunch { showWindow() }
     }
 
     @objc private func showWindow() {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
-    func applicationWillTerminate(_ notification: Notification) { monitor.stop() }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWindow()
+        return true
+    }
+    func applicationWillTerminate(_ notification: Notification) { monitor.stop(persistPause: false) }
 }
 
 struct Dashboard: View {
@@ -108,17 +129,103 @@ struct Dashboard: View {
                     }
                 }
             }
+            if monitor.waitingForPermission {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(monitor.permissionHelp).font(.callout)
+                    HStack {
+                        Button("打开输入监控设置") { monitor.openPermissionSettings() }
+                        Button("在 Finder 显示当前应用") { monitor.revealCurrentApp() }
+                        Button("取消等待") { monitor.stop() }
+                    }
+                }
+            }
             if let message = monitor.errorMessage { Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             Divider()
             HStack(alignment: .top) {
                 Text("仅统计含 ⌘ / ⌥ / ⌃ 的组合键，忽略长按重复。\n按前台应用归类；键位按美式 QWERTY 标记。数据仅保存在本机。")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                SettingsLink { Text("设置") }
                 Button("权限设置") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+                    monitor.openPermissionSettings()
                 }
                 Button("退出") { NSApp.terminate(nil) }
             }
         }.padding(28).frame(minWidth: 650, minHeight: 430)
+            .alert("输入监控权限尚未生效", isPresented: $monitor.showPermissionHelp) {
+                Button("打开系统设置") { monitor.openPermissionSettings() }
+                Button("稍后处理", role: .cancel) { }
+            } message: {
+                Text(monitor.permissionHelp)
+            }
+    }
+}
+
+
+private struct StartupSettings: View {
+    @ObservedObject private var login = LoginItemController.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("启动设置").font(.title2.bold())
+            Toggle("登录时启动 ShortcutStats", isOn: Binding(
+                get: { login.enabled }, set: { login.setEnabled($0) }
+            ))
+            Text("登录后在菜单栏后台运行，不弹出主窗口。上次手动暂停后，重新启动仍保持暂停。")
+                .font(.callout).foregroundStyle(.secondary)
+            Text(login.statusText).font(.callout)
+            if login.needsApproval {
+                Button("打开系统登录项设置") { SMAppService.openSystemSettingsLoginItems() }
+            }
+            if let error = login.error {
+                Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
+            Text("建议先将 App 放到应用程序文件夹再开启，避免登录时运行构建目录中的旧副本。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(24).frame(width: 430)
+        .onAppear { login.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            login.refresh()
+        }
+    }
+}
+
+private final class LoginItemController: ObservableObject {
+    static let shared = LoginItemController()
+    @Published private(set) var enabled = false
+    @Published private(set) var needsApproval = false
+    @Published private(set) var statusText = ""
+    @Published private(set) var error: String?
+
+    init() { refresh() }
+
+    func refresh() {
+        let status = SMAppService.mainApp.status
+        enabled = status == .enabled || status == .requiresApproval
+        needsApproval = status == .requiresApproval
+        switch status {
+        case .enabled: statusText = "已开启登录启动"
+        case .requiresApproval: statusText = "等待系统批准；请在登录项设置中允许 ShortcutStats。"
+        case .notRegistered: statusText = "未开启登录启动"
+        case .notFound: statusText = "系统无法找到应用，请从固定位置重新打开后再试。"
+        @unknown default: statusText = "无法确认登录启动状态"
+        }
+    }
+
+    func setEnabled(_ value: Bool) {
+        error = nil
+        do {
+            if value {
+                if SMAppService.mainApp.status != .enabled && SMAppService.mainApp.status != .requiresApproval {
+                    try SMAppService.mainApp.register()
+                }
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            self.error = "无法更新登录启动设置：\(error.localizedDescription)"
+        }
+        refresh()
     }
 }

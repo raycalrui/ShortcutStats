@@ -53,6 +53,10 @@ The scripts use `DEVELOPER_DIR` or the currently selected full Xcode installatio
 
 Click **开始统计** (Start Tracking), then allow ShortcutStats in **System Settings → Privacy & Security → Input Monitoring**. Quit and reopen the app if necessary. Closing the window leaves tracking active; click the keyboard icon in the menu bar to reopen it. **暂停统计** (Pause Tracking) stops monitoring.
 
+权限未生效时，点击「开始统计」会显示操作提示，并等待权限生效后自动重试。若设置中已开启但仍无法启动，先退出重开；仍无效时，移除旧授权条目，通过「在 Finder 显示当前应用」找到实际运行的副本并重新添加。开发构建使用 ad-hoc 签名，重新构建后可能需要重新授权。
+
+If permission is not effective, Start Tracking shows recovery instructions and automatically retries once access becomes available. If the switch is already enabled, quit and reopen first. If the issue persists, remove the old permission entry and use **在 Finder 显示当前应用** (Show Current App in Finder) to locate and re-add the running copy. Development builds use ad-hoc signing and may require renewed permission after rebuilding.
+
 可筛选今天、近 7 天、近 30 天或全部记录，以及按键发生时的前台应用。CSV 导出遵循当前筛选条件，每行是日期、应用、组合键、次数，便于重新汇总。时间按 Mac 本地日历计算。
 
 Filter records by today, the last 7 days, the last 30 days, or all time, and by the app that was in the foreground when a key was pressed. CSV exports respect the current filters. Each row contains the date, app, key combination, and count for further aggregation. Date ranges follow your Mac’s local calendar.
@@ -95,9 +99,9 @@ Filter records by today, the last 7 days, the last 30 days, or all time, and by 
 
   Data is stored at `~/Library/Application Support/ShortcutStats/statistics.json`. If loading fails, tracking is disabled to protect the existing file.
 
-- 本地 ad-hoc 签名供自用；重新构建可能需要重新授予输入监控权限。当前未提供开机启动或安装器。
+- 本地 ad-hoc 签名供自用；重新构建可能需要重新授予输入监控权限。现已提供登录启动开关，尚未提供安装器。
 
-  Local ad-hoc signing is intended for personal use. Rebuilding may require granting Input Monitoring permission again. Launch at login and an installer are not currently provided.
+  Local ad-hoc signing is intended for personal use. Rebuilding may require granting Input Monitoring permission again. A launch-at-login toggle is available; an installer is not yet provided.
 
 ## 验证 / Validation
 
@@ -124,3 +128,18 @@ Issues and pull requests are welcome. Please include your macOS and Xcode versio
 本项目采用 [MIT License](LICENSE)。
 
 This project is licensed under the [MIT License](LICENSE).
+
+
+## 登录时启动 / Launch at login
+
+在主窗口底部点击「设置」，开启「登录时启动 ShortcutStats」。如显示等待批准，点击「打开系统登录项设置」完成系统授权。关闭开关即可取消登录启动；设置中的状态以系统返回值为准，操作失败会显示错误。
+
+Click **设置** (Settings) at the bottom of the main window and enable **登录时启动 ShortcutStats** (Launch ShortcutStats at login). If approval is required, use the button to open the system Login Items settings. Turn the toggle off to unregister. The displayed state reflects the system status, and failures are shown explicitly.
+
+登录启动时只在菜单栏运行，不自动弹窗。手动打开 App 或点击菜单栏图标可显示窗口。手动暂停会跨重启保留；正常退出不会更改暂停偏好。缺少输入监控权限时，菜单栏显示警告图标，悬停可查看状态，打开窗口后可处理权限。
+
+At login, the app runs in the menu bar without opening its main window. Open the app manually or click its menu bar icon to show the window. Manual pause persists across launches; quitting normally does not change that preference. Missing Input Monitoring permission produces a warning icon in the menu bar, with status available in its tooltip and permission guidance in the main window.
+
+建议先将构建好的 App 放入应用程序文件夹，并退出其他副本，再从该位置开启登录启动。移动或重新构建 App 后可能需要重新设置登录项或输入监控权限。真实登录自动启动需通过注销再登录进行验证。
+
+Place the built app in Applications and quit other copies before enabling launch at login from that location. Moving or rebuilding the app may require reconfiguring the login item or Input Monitoring permission. Actual login behavior must be verified by logging out and back in.
