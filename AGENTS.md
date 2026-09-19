@@ -1,0 +1,76 @@
+# AGENTS.md
+
+本文件适用于整个 ShortcutStats 仓库，供参与开发的 agent 阅读。修改前先检查当前代码、README 和工作区状态；本文件描述的现状应以实际实现为准。
+
+## 项目定位
+
+- ShortcutStats 是本地运行的 macOS 菜单栏快捷键频率统计工具，使用 SwiftUI、AppKit 和 Core Graphics，无第三方依赖，最低支持 macOS 14。
+- 保持标准 Xcode App 项目结构；不要改回 Swift Package，也不要为小改动引入项目生成工具或替换技术栈。
+- 优先小范围、可验证的修改。诊断请求只提供发现与证据，除非用户同时要求修复。
+- README 保持逐段中英对照；功能、使用方式或限制发生变化时，同步更新两种语言。
+
+## 文件导航
+
+| 路径 | 职责 |
+| --- | --- |
+| `Sources/ShortcutStats/ShortcutStatsApp.swift` | 应用入口、菜单栏、窗口生命周期和排行榜界面 |
+| `Sources/ShortcutStats/Monitor.swift` | 输入监控权限、事件监听、应用归属、计数及本地保存 |
+| `Sources/ShortcutStats/Statistics.swift` | 排名汇总、筛选和 CSV 编码 |
+| `Configuration/Info.plist` | App 元数据与菜单栏应用配置 |
+| `ShortcutStats.xcodeproj` | App target、构建配置和共享 Scheme |
+| `Tests/main.swift` | 独立逻辑检查程序，不是 XCTest target |
+| `scripts/build.sh` | 使用 Xcode 构建 Release，并复制到 `dist` |
+| `scripts/check.sh` | 编译和运行逻辑检查 |
+| `scripts/xcode-env.sh` | 为当前进程选择完整 Xcode |
+
+新增 Swift 文件时，检查 Xcode target 的文件引用和 Sources build phase；独立检查程序所需的源文件还应加入 `scripts/check.sh`。
+
+## 构建与验证
+
+从仓库根目录运行：
+
+```sh
+# 逻辑检查
+zsh scripts/check.sh
+
+# Release 构建
+zsh scripts/build.sh
+
+# 检查生成的 App 签名
+codesign --verify --strict --verbose=2 dist/ShortcutStats.app
+```
+
+- 在 Xcode 打开 `ShortcutStats.xcodeproj`，选择 `ShortcutStats → My Mac`，按 ⌘R 运行和调试。
+- 构建需要完整 Xcode。脚本优先使用 `DEVELOPER_DIR` 或已选择的完整 Xcode，再寻找已安装的 Xcode；不要擅自修改全局 `xcode-select`。
+- 默认使用本地 ad-hoc 签名。不要写入个人开发者团队、证书、描述文件或凭据。
+- 当前没有 Swift Package，也没有接入 Xcode Test action；不要用 `swift test` 或 `xcodebuild test` 代替现有检查脚本。
+- 文档修改检查格式、链接和命令即可。统计逻辑修改运行相关逻辑检查；Swift、项目配置或界面修改还需构建验证，界面修改需检查实际窗口。
+- 构建、逻辑检查通过不代表真实全局监听已验证。手动检查应覆盖计数、长按重复、应用切换、暂停、重启后的保存恢复及 CSV 筛选；报告清楚哪些已验证、哪些受权限或环境限制。
+- 性能结论必须区分设计预期和实际测量；不要把编译成功写成低耗电或准确率已获验证。
+
+## 统计与隐私约束
+
+- 保持被动监听，不吞掉、重写或注入用户按键。
+- 当前仅统计含 Command、Option 或 Control 的 key-down，Shift 可作为附加修饰键；忽略系统自动重复，手动重复分别计数。
+- 当前按美式 QWERTY 物理键位命名。单键、仅 Shift、媒体键、Fn 特殊操作及多段快捷键语义不属于已支持范围。
+- 应用归属指按键时的前台应用，不等于实际处理快捷键的应用；计数代表按键尝试，不证明命令执行成功。
+- 不保存输入正文、普通打字、按键顺序、窗口标题或网页地址，不添加遥测、网络上传或账号系统。
+- 不绕过输入监控权限或安全输入保护，不替用户重置权限数据库。安全输入期间的缺失不得伪装成完整统计。
+- 事件回调保持轻量；避免逐次写盘、扫描菜单、执行耗时 I/O 或频繁刷新整个界面。
+- 扩展统计范围时，先明确计数口径及对隐私、历史排名的影响，再实现并同步文档。
+
+## 数据兼容性
+
+- 保持 Bundle ID `cc.raycal.ShortcutStats` 和数据位置 `~/Library/Application Support/ShortcutStats/statistics.json`，除非任务明确要求变更。
+- 保存记录包含日期、应用 ID、应用名、组合键和次数。日期遵循 Mac 本地日历，CSV 导出遵循当前筛选条件。
+- 保留原子保存、正常退出保存以及读取失败时保护原文件的行为。不要为调试删除、覆盖或提交用户真实统计。
+- 修改持久化格式时提供向后兼容方案；验证使用合成样本或隔离副本。
+- CSV 编码须保留引号转义和公式注入防护。
+
+## Git 与交付
+
+- 修改前运行 `git status --short`，保留用户已有修改。只暂存当前任务涉及的文件，并检查 staged diff。
+- 不提交 `.build/`、`dist/`、`.swiftpm/`、`xcuserdata/`、`*.xcuserstate`、个人统计、日志中的敏感内容或签名材料。
+- 提交前运行 `git diff --cached --check`。推送必须在用户授权范围内，不能将一次发布授权视为所有未来发布的授权。
+- 不擅自 force push、创建 Release、上传安装包或改变仓库可见性。
+- 交付时简要说明改动、验证结果和未验证部分；区分本地修改、已提交与已确认推送。
