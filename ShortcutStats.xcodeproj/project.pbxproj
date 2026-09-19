@@ -5,6 +5,9 @@
 	};
 	"objectVersion" = 56;
 	"objects" = {
+        "000000000000000000000094" = { "isa" = "PBXFileReference"; "lastKnownFileType" = "text.xcconfig"; "path" = "Signing.xcconfig"; "sourceTree" = "<group>"; };
+        "000000000000000000000092" = { "isa" = "PBXFileReference"; "lastKnownFileType" = "sourcecode.swift"; "path" = "TrackingHealth.swift"; "sourceTree" = "<group>"; };
+        "000000000000000000000093" = { "isa" = "PBXBuildFile"; "fileRef" = "000000000000000000000092"; };
         "000000000000000000000090" = {
             "isa" = "PBXFileReference";
             "lastKnownFileType" = "folder.assetcatalog";
@@ -66,13 +69,13 @@
 		};
 		"000000000000000000000028" = {
 			"isa" = "PBXGroup";
-			"children" = ("00000000000000000000000A", "00000000000000000000000B", "00000000000000000000000C");
+			"children" = ("000000000000000000000092", "00000000000000000000000A", "00000000000000000000000B", "00000000000000000000000C");
 			"path" = "Sources/ShortcutStats";
 			"sourceTree" = "<group>";
 		};
 		"000000000000000000000029" = {
 			"isa" = "PBXGroup";
-			"children" = ("00000000000000000000001F");
+			"children" = ("00000000000000000000001F", "000000000000000000000094");
 			"path" = "Configuration";
 			"sourceTree" = "<group>";
 		};
@@ -90,7 +93,7 @@
 		"000000000000000000000032" = {
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = 2147483647;
-			"files" = ("000000000000000000000014", "000000000000000000000015", "000000000000000000000016");
+			"files" = ("000000000000000000000093", "000000000000000000000014", "000000000000000000000015", "000000000000000000000016");
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
 		"000000000000000000000033" = {
@@ -124,6 +127,7 @@
 		};
 		"00000000000000000000003E" = {
 			"isa" = "XCBuildConfiguration";
+            "baseConfigurationReference" = "000000000000000000000094";
 			"name" = "Debug";
 			"buildSettings" = {
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
@@ -131,8 +135,6 @@
 				"PRODUCT_BUNDLE_IDENTIFIER" = "cc.raycal.ShortcutStats";
 				"INFOPLIST_FILE" = "Configuration/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
-				"CODE_SIGN_STYLE" = "Manual";
-				"CODE_SIGN_IDENTITY" = "-";
 				"ENABLE_APP_SANDBOX" = "NO";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"COMBINE_HIDPI_IMAGES" = "YES";
@@ -158,6 +160,7 @@
 		};
 		"00000000000000000000003F" = {
 			"isa" = "XCBuildConfiguration";
+            "baseConfigurationReference" = "000000000000000000000094";
 			"name" = "Release";
 			"buildSettings" = {
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
@@ -165,8 +168,6 @@
 				"PRODUCT_BUNDLE_IDENTIFIER" = "cc.raycal.ShortcutStats";
 				"INFOPLIST_FILE" = "Configuration/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
-				"CODE_SIGN_STYLE" = "Manual";
-				"CODE_SIGN_IDENTITY" = "-";
 				"ENABLE_APP_SANDBOX" = "NO";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"COMBINE_HIDPI_IMAGES" = "YES";

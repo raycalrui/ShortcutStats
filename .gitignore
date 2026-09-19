@@ -4,3 +4,6 @@ dist/
 .swiftpm/
 xcuserdata/
 *.xcuserstate
+
+# Local signing identity and team
+Configuration/Signing.local.xcconfig

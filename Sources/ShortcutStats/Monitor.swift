@@ -8,6 +8,20 @@ final class Monitor: ObservableObject {
     @Published var records: [UsageRecord] = []
     @Published var status = "尚未开始"
     @Published var running = false
+    @Published private(set) var wantsTracking = false
+    @Published private(set) var health: TrackingState = .paused
+    @Published private(set) var interruptions: [TrackingGap] = []
+    @Published var showInterruptions = false
+    @Published private(set) var historyError: String?
+    private var gapHistory = GapHistory()
+    private var historyReadable = true
+    private var historyDirty = false
+    private var stateInitialized = false
+    private var sleeping = false
+    private var shuttingDown = false
+    private var lastAttempt = Date.distantPast
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var historyURL: URL { file.deletingLastPathComponent().appendingPathComponent("interruptions.json") }
     @Published var errorMessage: String?
     @Published var showPermissionHelp = false
     @Published private(set) var waitingForPermission = false
@@ -52,6 +66,30 @@ final class Monitor: ObservableObject {
             loadFailed = true
             errorMessage = "无法读取历史数据，已停止记录以保护原文件：\(error.localizedDescription)"
         }
+        do {
+            if FileManager.default.fileExists(atPath: historyURL.path) {
+                gapHistory.entries = try JSONDecoder().decode([TrackingGap].self, from: Data(contentsOf: historyURL))
+                interruptions = gapHistory.entries
+            }
+        } catch {
+            historyReadable = false
+            historyError = "中断记录读取失败，保留原文件：\(error.localizedDescription)"
+        }
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.sleeping = true
+            self.reconcile()
+            self.save()
+            self.saveHistory()
+        })
+        workspaceObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.sleeping = false
+            self.lastAttempt = .distantPast
+            self.updateForeground()
+            self.reconcile()
+        })
         updateForeground()
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -60,19 +98,8 @@ final class Monitor: ObservableObject {
             guard let self else { return }
             if self.dirty { self.records = Array(self.counts.values) }
             if Date().timeIntervalSince(self.lastSave) >= 15 { self.save() }
-            if self.waitingForPermission && CGPreflightListenEventAccess() {
-                self.start(requestPermission: false)
-            }
-            if self.running {
-                if !CGPreflightListenEventAccess() {
-                    self.stop(persistPause: false)
-                    self.status = "输入监控权限已撤销"
-                } else if IsSecureEventInputEnabled() {
-                    self.status = "安全输入启用中 · 暂时无法统计"
-                } else {
-                    self.status = "正在统计"
-                }
-            }
+            self.reconcile()
+            if self.historyDirty { self.saveHistory() }
         }
     }
 
@@ -84,33 +111,68 @@ final class Monitor: ObservableObject {
     }
 
     func restoreTracking() {
-        if UserDefaults.standard.bool(forKey: "trackingPaused") {
-            status = "已暂停"
-        } else {
-            start(requestPermission: false)
-        }
+        wantsTracking = !UserDefaults.standard.bool(forKey: "trackingPaused")
+        reconcile()
     }
 
     func start(requestPermission: Bool = true) {
-        if requestPermission { UserDefaults.standard.set(false, forKey: "trackingPaused") }
-        guard !running, !loadFailed else { return }
-        var authorized = CGPreflightListenEventAccess()
-        if !authorized && requestPermission {
-            authorized = CGRequestListenEventAccess()
+        wantsTracking = true
+        UserDefaults.standard.set(false, forKey: "trackingPaused")
+        if requestPermission && !CGPreflightListenEventAccess() {
+            _ = CGRequestListenEventAccess()
         }
-        guard authorized || CGPreflightListenEventAccess() else {
-            status = "输入监控权限尚未对当前应用生效"
-            waitingForPermission = requestPermission || waitingForPermission
-            if requestPermission { showPermissionHelp = true }
+        lastAttempt = .distantPast
+        reconcile()
+        showPermissionHelp = requestPermission && waitingForPermission
+    }
+
+    private func transition(_ state: TrackingState) {
+        running = state == .recording
+        waitingForPermission = state == .permission
+        if !waitingForPermission { showPermissionHelp = false }
+        if !stateInitialized || health != state {
+            stateInitialized = true
+            health = state
+            gapHistory.transition(to: state, at: Date())
+            interruptions = gapHistory.entries
+            historyDirty = true
+        }
+        if status != state.title { status = state.title }
+    }
+
+    private func reconcile() {
+        guard !shuttingDown else { return }
+        if let blocked = TrackingHealth.blockedState(wantsTracking: wantsTracking, dataValid: !loadFailed,
+            sleeping: sleeping, authorized: CGPreflightListenEventAccess(), secureInput: IsSecureEventInputEnabled()) {
+            tearDownTap()
+            transition(blocked)
             return
         }
-        waitingForPermission = false
-        showPermissionHelp = false
+        if let tap, CFMachPortIsValid(tap), CGEvent.tapIsEnabled(tap: tap) {
+            transition(.recording)
+            return
+        }
+        if tap != nil { transition(.fault) }
+        tearDownTap()
+        // Failed recreation is retried at most once every five seconds.
+        guard Date().timeIntervalSince(lastAttempt) >= 5 else { return }
+        lastAttempt = Date()
+        installTap()
+    }
+
+    private func installTap() {
         let callback: CGEventTapCallBack = { _, type, event, context in
             guard let context else { return Unmanaged.passUnretained(event) }
             let monitor = Unmanaged<Monitor>.fromOpaque(context).takeUnretainedValue()
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                if let tap = monitor.tap { CGEvent.tapEnable(tap: tap, enable: true) }
+                monitor.running = false
+                // Recreate outside the callback; old tap is removed before any replacement.
+                DispatchQueue.main.async { [weak monitor] in
+                    guard let monitor, !monitor.shuttingDown else { return }
+                    monitor.tearDownTap()
+                    if monitor.wantsTracking { monitor.transition(.fault) }
+                    monitor.reconcile()
+                }
             } else if type == .keyDown {
                 monitor.receive(event)
             }
@@ -121,7 +183,7 @@ final class Monitor: ObservableObject {
             eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
             callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            status = "无法启动监听，请检查权限并重新打开 App"
+            transition(.fault)
             return
         }
         tap = newTap
@@ -129,26 +191,48 @@ final class Monitor: ObservableObject {
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: newTap, enable: true)
         updateForeground()
-        running = true
-        status = "正在统计"
+        if CGEvent.tapIsEnabled(tap: newTap) { transition(.recording) }
+        else { tearDownTap(); transition(.fault) }
     }
 
-    func stop(persistPause: Bool = true) {
-        if persistPause { UserDefaults.standard.set(true, forKey: "trackingPaused") }
-        waitingForPermission = false
-        showPermissionHelp = false
+    private func tearDownTap() {
         if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         tap = nil
         source = nil
         running = false
-        status = "已暂停"
+    }
+
+    func stop(persistPause: Bool = true) {
+        if persistPause {
+            wantsTracking = false
+            UserDefaults.standard.set(true, forKey: "trackingPaused")
+            reconcile()
+        } else {
+            shuttingDown = true
+            timer?.invalidate()
+            tearDownTap()
+            gapHistory.finish(at: Date())
+            historyDirty = true
+        }
+        showPermissionHelp = false
         records = Array(counts.values)
         save()
+        saveHistory()
+    }
+
+    private func saveHistory() {
+        guard historyDirty, historyReadable else { return }
+        do {
+            try FileManager.default.createDirectory(at: historyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(gapHistory.entries).write(to: historyURL, options: .atomic)
+            historyDirty = false
+            historyError = nil
+        } catch { historyError = "中断记录保存失败：\(error.localizedDescription)" }
     }
 
     private func receive(_ event: CGEvent) {
-        guard running, let shortcut = Self.shortcut(for: event) else { return }
+        guard running, wantsTracking, !sleeping, !IsSecureEventInputEnabled(), let shortcut = Self.shortcut(for: event) else { return }
         let record = UsageRecord(day: formatter.string(from: Date()), appID: foregroundID,
                                  appName: foregroundName, shortcut: shortcut, count: 1)
         let id = key(record)

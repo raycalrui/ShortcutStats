@@ -38,11 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.minSize = NSSize(width: 700, height: 480)
         window.contentView = NSHostingView(rootView: Dashboard(monitor: monitor))
         window.center()
-        statusSubscription = monitor.$status.sink { [weak self] status in
-            self?.item.button?.toolTip = "ShortcutStats · " + status
-            self?.item.button?.image = NSImage(systemSymbolName:
-                status.contains("权限") || status.contains("无法") ? "exclamationmark.triangle" : "keyboard",
-                accessibilityDescription: status)
+        statusSubscription = monitor.$health.sink { [weak self] state in
+            self?.item.button?.toolTip = "ShortcutStats · " + state.title
+            self?.item.button?.image = NSImage(systemSymbolName: state.symbol, accessibilityDescription: state.title)
         }
         monitor.restoreTracking()
         if !loginLaunch { showWindow() }
@@ -83,12 +81,12 @@ struct Dashboard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("我最常用的快捷键").font(.largeTitle.bold())
-                    Label(monitor.status, systemImage: monitor.running ? "circle.fill" : "pause.circle")
+                    Label(monitor.status, systemImage: monitor.health.symbol)
                         .font(.subheadline).foregroundStyle(monitor.running ? .green : .secondary)
                 }
                 Spacer()
-                Button(monitor.running ? "暂停统计" : "开始统计") {
-                    if monitor.running { monitor.stop() } else { monitor.start() }
+                Button(monitor.wantsTracking ? "暂停统计" : "开始统计") {
+                    if monitor.wantsTracking { monitor.stop() } else { monitor.start() }
                 }
             }
             HStack {
@@ -140,11 +138,13 @@ struct Dashboard: View {
                 }
             }
             if let message = monitor.errorMessage { Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let historyError = monitor.historyError { Text(historyError).font(.caption).foregroundStyle(.red) }
             Divider()
             HStack(alignment: .top) {
                 Text("仅统计含 ⌘ / ⌥ / ⌃ 的组合键，忽略长按重复。\n按前台应用归类；键位按美式 QWERTY 标记。数据仅保存在本机。")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                Button("中断记录") { monitor.showInterruptions = true }
                 SettingsLink { Text("设置") }
                 Button("权限设置") {
                     monitor.openPermissionSettings()
@@ -152,6 +152,24 @@ struct Dashboard: View {
                 Button("退出") { NSApp.terminate(nil) }
             }
         }.padding(28).frame(minWidth: 650, minHeight: 430)
+            .sheet(isPresented: $monitor.showInterruptions) {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("采集中断记录").font(.title2.bold())
+                        Spacer()
+                        Button("关闭") { monitor.showInterruptions = false }
+                    }
+                    Text("仅记录本 App 运行时发现的状态变化。检测存在约 2 秒延迟；没有记录不代表采集完整。无结束时间表示仍在持续或上次异常退出，不能据此推算离线时长。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    List(monitor.interruptions.reversed()) { gap in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(gap.reason.title)
+                            Text(gap.start.formatted() + " → " + (gap.end?.formatted() ?? "持续中 / 结束未知"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }.padding(24).frame(width: 570, height: 400)
+            }
             .alert("输入监控权限尚未生效", isPresented: $monitor.showPermissionHelp) {
                 Button("打开系统设置") { monitor.openPermissionSettings() }
                 Button("稍后处理", role: .cancel) { }

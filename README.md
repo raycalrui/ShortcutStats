@@ -105,9 +105,9 @@ Filter records by today, the last 7 days, the last 30 days, or all time, and by 
 
 ## 验证 / Validation
 
-现有 11 项逻辑检查通过独立脚本运行（不在 Xcode Test action 中）：
+现有 29 项逻辑检查通过独立脚本运行（不在 Xcode Test action 中）：
 
-Run the 11 existing logic checks using the standalone script (they are not part of the Xcode Test action):
+Run the 29 existing logic checks using the standalone script (they are not part of the Xcode Test action):
 
 ```sh
 zsh scripts/check.sh
@@ -143,3 +143,29 @@ At login, the app runs in the menu bar without opening its main window. Open the
 建议先将构建好的 App 放入应用程序文件夹，并退出其他副本，再从该位置开启登录启动。移动或重新构建 App 后可能需要重新设置登录项或输入监控权限。真实登录自动启动需通过注销再登录进行验证。
 
 Place the built app in Applications and quit other copies before enabling launch at login from that location. Moving or rebuilding the app may require reconfiguring the login item or Input Monitoring permission. Actual login behavior must be verified by logging out and back in.
+
+
+## 监听恢复与中断记录 / Monitoring recovery and interruption history
+
+App 每约 2 秒检查采集条件和监听有效状态。睡眠、权限缺失或安全输入时停止监听；恢复后仅在用户希望继续统计时重新建立监听。创建失败最多每 5 秒重试一次，旧监听会先移除，避免重复计数。手动暂停始终优先，自动恢复不会取消暂停。
+
+The app checks capture conditions and event-tap health approximately every two seconds. Monitoring stops during sleep, missing permission, or Secure Input, and resumes only when the user intends to keep tracking. Failed creation is retried at most once every five seconds. The previous tap is removed before replacement to prevent duplicate counting. Automatic recovery never overrides a manual pause.
+
+主窗口和菜单栏区分正在统计、手动暂停、等待权限、安全输入、睡眠及监听异常。点击「中断记录」查看本 App 运行期间发现的中断起止时间和原因。记录单独原子保存至 `~/Library/Application Support/ShortcutStats/interruptions.json`，不包含按键、窗口或应用内容；原统计文件保持不变。
+
+The main window and menu bar distinguish recording, manual pause, permission wait, Secure Input, sleep, and listener failure. Click **中断记录** (Interruption History) to view detected intervals and reasons. Records are saved atomically to `~/Library/Application Support/ShortcutStats/interruptions.json`, without keystrokes, window contents, or app contents. The original statistics file is unchanged.
+
+检测有延迟，短暂中断可能未被发现。异常退出前未保存的记录可能丢失，无结束时间表示持续中或结束未知；App 未运行期间不会推算原因或补造记录。新增合成检查验证暂停优先级、恢复条件及中断记录生命周期，但真实睡眠唤醒、权限切换和安全输入仍需在本机验证。
+
+Detection is delayed and brief interruptions may go unnoticed. Unsaved records can be lost on a crash; a missing end time means ongoing or unknown. No causes or records are inferred for periods when the app was not running. Added synthetic checks validate pause precedence, recovery conditions, and interruption lifecycle; actual sleep/wake, permission changes, and Secure Input still require on-device validation.
+
+
+## 本地开发签名 / Local development signing
+
+Debug 和 Release 共用 `Configuration/Signing.xcconfig`，默认使用 ad-hoc 签名。需要固定开发身份时，可创建 Git 已忽略的 `Configuration/Signing.local.xcconfig`，设置 `DEVELOPMENT_TEAM` 和 `CODE_SIGN_IDENTITY` 为本机可用的开发团队与证书。不要提交该文件或私钥。证书更新后需同步本地配置。
+
+Debug and Release share `Configuration/Signing.xcconfig`, with ad-hoc signing as the public default. For a stable development identity, create the Git-ignored `Configuration/Signing.local.xcconfig` and set `DEVELOPMENT_TEAM` and `CODE_SIGN_IDENTITY` to your locally available team and certificate. Do not commit this file or private keys. Update the local configuration when renewing the certificate.
+
+从 ad-hoc 切换开发签名后，可能需要为当前 App 再授权一次输入监控。后续应使用同一 Bundle ID、签名身份和固定运行位置；是否保留授权仍需在本机重新构建后验证。
+
+Switching from ad-hoc to development signing may require granting Input Monitoring permission again. Keep the same bundle identifier, signing identity, and launch location for subsequent builds. Permission persistence must still be verified after rebuilding on your Mac.

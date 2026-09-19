@@ -15,6 +15,7 @@
 | --- | --- |
 | `Sources/ShortcutStats/ShortcutStatsApp.swift` | 应用入口、菜单栏、窗口生命周期和排行榜界面 |
 | `Sources/ShortcutStats/Monitor.swift` | 输入监控权限、事件监听、应用归属、计数及本地保存 |
+| `Sources/ShortcutStats/TrackingHealth.swift` | 状态判定、暂停优先级和中断记录模型 |
 | `Sources/ShortcutStats/Statistics.swift` | 排名汇总、筛选和 CSV 编码 |
 | `Configuration/Info.plist` | App 元数据与菜单栏应用配置 |
 | `ShortcutStats.xcodeproj` | App target、构建配置和共享 Scheme |
@@ -42,7 +43,7 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 
 - 在 Xcode 打开 `ShortcutStats.xcodeproj`，选择 `ShortcutStats → My Mac`，按 ⌘R 运行和调试。
 - 构建需要完整 Xcode。脚本优先使用 `DEVELOPER_DIR` 或已选择的完整 Xcode，再寻找已安装的 Xcode；不要擅自修改全局 `xcode-select`。
-- 默认使用本地 ad-hoc 签名。不要写入个人开发者团队、证书、描述文件或凭据。
+- 公开默认使用 ad-hoc 签名；Debug / Release 共用 `Configuration/Signing.xcconfig`。个人签名身份仅放入已忽略的 `Configuration/Signing.local.xcconfig`，不得提交团队、证书、描述文件或凭据。
 - 当前没有 Swift Package，也没有接入 Xcode Test action；不要用 `swift test` 或 `xcodebuild test` 代替现有检查脚本。
 - 文档修改检查格式、链接和命令即可。统计逻辑修改运行相关逻辑检查；Swift、项目配置或界面修改还需构建验证，界面修改需检查实际窗口。
 - 构建、逻辑检查通过不代表真实全局监听已验证。手动检查应覆盖计数、长按重复、应用切换、暂停、重启后的保存恢复及 CSV 筛选；报告清楚哪些已验证、哪些受权限或环境限制。
@@ -60,6 +61,8 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 - 扩展统计范围时，先明确计数口径及对隐私、历史排名的影响，再实现并同步文档。
 
 ## 数据兼容性
+
+- 中断记录独立保存在同目录的 `interruptions.json`，只保存起止时间及原因；不能把未知结束时间或未运行期间解释为完整采集。
 
 - 保持 Bundle ID `cc.raycal.ShortcutStats` 和数据位置 `~/Library/Application Support/ShortcutStats/statistics.json`，除非任务明确要求变更。
 - 保存记录包含日期、应用 ID、应用名、组合键和次数。日期遵循 Mac 本地日历，CSV 导出遵循当前筛选条件。

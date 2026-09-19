@@ -1,0 +1,5 @@
+// Public default: build locally without a development team.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+// Local overrides are intentionally excluded from Git.
+#include? "Signing.local.xcconfig"
