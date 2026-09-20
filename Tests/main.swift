@@ -124,3 +124,13 @@ check(Monitor.mediaShortcut(subtype: 8, data: 0x0a01) == nil, "媒体长按不�
 check(Monitor.mediaShortcut(subtype: 7, data: 0x0a00) == nil, "忽略其他系统事件")
 check(Monitor.mediaShortcut(subtype: 8, data: (16 << 16) | 0x0a00) == "播放/暂停", "播放键")
 check(Monitor.mediaShortcut(subtype: 8, data: (99 << 16) | 0x0a00) == nil, "不猜测未知系统功能")
+
+let selectionRows = [UsageRecord(day: "2026-09-20", appID: "test", appName: "Test", shortcut: "⇧⌘C", count: 10, modifierCounts: ["L⌘": 3, "R⌘": 7, "L⇧": 6, "R⇧": 4])]
+let selectedRows = Statistics.heatmapRecords(selectionRows, modifier: "L⌘")
+check(Statistics.keyTotals(selectedRows)["C"] == 3, "修饰键筛选主键只计实际该侧次数")
+check(Statistics.keyTotals(selectedRows)["R⇧"] == nil, "不推算其他修饰键交集")
+check(Statistics.rankings(selectedRows, since: "", appID: "").first?.count == 3, "多修饰组合明细使用筛选次数")
+check(Statistics.heatmapRecords(selectionRows, modifier: "R⌘").first?.count == 7, "切换右侧筛选")
+check(Statistics.heatmapRecords(selectionRows, modifier: nil).first?.count == 10, "取消恢复原始次数")
+check(Statistics.heatmapRecords(selectionRows, modifier: "L⌥").isEmpty, "无匹配修饰键为空")
+check(Statistics.heatmapRecords([sided], modifier: "L⌘").first?.count == 1, "未知历史不混入左右筛选")

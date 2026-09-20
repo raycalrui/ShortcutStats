@@ -230,3 +230,7 @@ Main keys use blue and modifiers use orange, with independent color scales based
 系统功能事件按名称独立排行，并在热力图下方列出；顶部 F1–F12 只累计实际 F 键事件，不根据音量或亮度反推物理键位。事件只通过一个被动监听入口处理，忽略抬键和系统重复；真实键盘、改键软件及系统版本的兼容性需实测。
 
 System-function events have distinct ranking names and appear below the keyboard heatmap. Top-row F1–F12 counts represent actual F-key events; volume and brightness do not imply a physical key position. A single passive event tap handles delivery, ignoring releases and system repeats. Hardware, remapping tools and OS compatibility require real-device verification.
+
+点击热力图中的左右修饰键可筛选主键用量，重复点击取消，点击另一修饰键切换。日期和应用范围继续生效，主键色阶与明细按筛选次数重新计算。包含额外修饰键的组合也计入。其他修饰键只作切换入口：已有聚合数据不能推算不同左右修饰键的共同使用次数。
+
+Click a sided modifier to filter main-key usage; click it again to clear or another modifier to switch. Date and app filters still apply. Main-key colors and details use the filtered counts, including shortcuts with additional modifiers. Other modifiers serve as filter controls only: existing aggregates cannot establish co-occurrence between modifier sides.

@@ -129,6 +129,17 @@ extension Statistics {
         }
     }
 
+    // Existing aggregates know each side's participation, but not intersections
+    // between different modifier sides. Never infer those intersections.
+    static func heatmapRecords(_ records: [UsageRecord], modifier: String?) -> [UsageRecord] {
+        guard let modifier else { return records }
+        return self.records(records, forKey: modifier).map { record in
+            var result = record
+            result.modifierCounts = [modifier: record.count]
+            return result
+        }
+    }
+
     static func keyTotals(_ records: [UsageRecord]) -> [String: Int] {
         var totals: [String: Int] = [:]
         for record in records {
