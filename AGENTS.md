@@ -65,7 +65,7 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 
 - 中断记录独立保存在同目录的 `interruptions.json`，只保存起止时间及原因；不能把未知结束时间或未运行期间解释为完整采集。
 
-- 保持 Bundle ID `cc.raycal.ShortcutStats` 和数据位置 `~/Library/Application Support/ShortcutStats/statistics.json`，除非任务明确要求变更。
+- 公开版保持 Bundle ID `cc.raycal.ShortcutStats`；本机开发签名可在忽略的配置中设置 `SHORTCUTSTATS_BUNDLE_ID = cc.raycal.ShortcutStats.local`，避免与公开版混用权限身份。本机版禁用公开更新。两者共用数据位置 `~/Library/Application Support/ShortcutStats/statistics.json`，不要同时运行；不得为区分身份迁移或清空数据。
 - 保存记录包含日期、应用 ID、应用名、组合键和次数。日期遵循 Mac 本地日历，CSV 导出遵循当前筛选条件。
 - 保留原子保存、正常退出保存以及读取失败时保护原文件的行为。不要为调试删除、覆盖或提交用户真实统计。
 - 修改持久化格式时提供向后兼容方案；验证使用合成样本或隔离副本。
@@ -85,7 +85,7 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 - 更新列表和安装包均需 EdDSA 签名；不得关闭 `SURequireSignedFeed` 或 `SUVerifyUpdateBeforeExtraction`。
 - 更新私钥在钥匙串的 `cc.raycal.ShortcutStats` account，不能导出或提交；Info.plist 只保存公钥。
 - 每次发布递增 CFBundleVersion；0.x 接收 beta 和正式频道。自动检查默认关闭，用户可开启；安装必须确认。
-- 构建 ad-hoc 公开包时使用命令行 `ENABLE_HARDENED_RUNTIME=NO CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=`，之后运行 `scripts/sign-ad-hoc-release.sh`。本机开发签名及项目 hardened runtime 默认值保持原样。
+- 公开发布必须使用 `scripts/build-release.sh` 和稳定的 Developer ID Application 身份；`package-dmg.sh` 强制校验。禁止回退 ad-hoc 发布，否则更新会改变 TCC 身份。本机开发签名保持原样；ad-hoc 脚本仅允许显式测试用途。
 - DMG 用 `scripts/package-dmg.sh` 生成；更新列表用 `scripts/prepare-update.sh` 生成。先上传对应 Release 附件并验证，再推送引用该附件的 appcast，避免用户收到失效下载。
 - 不把 ad-hoc / EdDSA 更新签名等同于 Developer ID 或 Apple 公证。完整安装更新验收用隔离测试副本，避免替换用户正在使用的 App 或真实数据。
 
@@ -107,3 +107,4 @@ Volume Up/Down events are grouped with F12/F11 in the heatmap, with original act
 - 普通主键、鼠标、活跃时长默认独立关闭，使用 AppStorage/UserDefaults 开关；保持全局暂停、安全输入、锁屏和睡眠约束。不得保存文字、输入顺序、鼠标坐标或轨迹。
 - 移动为事件单位，连续滚动为点、离散滚动为行，所有轴的绝对增量分别累计。不能宣称真实距离或打字字符数。
 - 独立检查包含 InputMetricsChecks、ActiveTimeChecks 与 SQLite 隔离临时库测试；真实设备、锁屏、睡眠及高频鼠标功耗仍需实机验收。
+- 默认统计总览、应用时长排行榜、热力图双模式共用顶部日期/应用筛选。`ActivitySummary` 负责展示汇总：快捷键取每日记录，不能与小时 shortcut 或全部主键相加；应用按 appID 合并，占比使用筛选后总活跃时长。全部主键热力图从 key: 指标转换，按完整物理键名统计，不解析成快捷键或合并媒体事件。关闭采集保留历史并明确提示。

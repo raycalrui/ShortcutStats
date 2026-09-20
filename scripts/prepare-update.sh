@@ -32,6 +32,8 @@ case "${archive_path:e:l}" in
         ;;
 esac
 
+zsh "$project_directory/scripts/verify-update-archive.sh" "$archive_path"
+
 work_directory="$(mktemp -d "${TMPDIR:-/tmp}/shortcutstats-appcast.XXXXXX")"
 trap 'rm -rf "$work_directory"' EXIT
 

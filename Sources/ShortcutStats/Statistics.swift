@@ -1,5 +1,50 @@
 import Foundation
 
+struct AppActivityRanking: Identifiable {
+    let id: String
+    let name: String
+    let seconds: Double
+    let share: Double
+}
+
+/// Presentation aggregates for an already date- and app-filtered range.
+/// Legacy shortcut totals and hourly input totals overlap and must never be added together.
+struct ActivitySummary {
+    let keyPresses: Double
+    let shortcutCount: Int
+    let mouseClicks: Double
+    let activeSeconds: Double
+    let appRankings: [AppActivityRanking]
+
+    init(rows: [HourMetric], records: [UsageRecord]) {
+        let valid = rows.filter { $0.value.isFinite && $0.value > 0 }
+        keyPresses = valid.filter { $0.metric.hasPrefix("key:") && $0.metric.count > 4 }
+            .reduce(0) { $0 + $1.value }
+        shortcutCount = records.reduce(0) { $0 + max(0, $1.count) }
+        mouseClicks = valid.filter { ["mouse.left", "mouse.right", "mouse.other"].contains($0.metric) }
+            .reduce(0) { $0 + $1.value }
+        let active = valid.filter { $0.metric == "active.seconds" }
+        let total = active.reduce(0) { $0 + $1.value }
+        activeSeconds = total
+        appRankings = Dictionary(grouping: active, by: \.appID).map { id, values in
+            let seconds = values.reduce(0) { $0 + $1.value }
+            let latest = values.max { ($0.hour, $0.appName) < ($1.hour, $1.appName) }
+            let name = latest?.appName ?? id
+            return AppActivityRanking(id: id, name: name.isEmpty ? id : name,
+                                      seconds: seconds, share: total > 0 ? seconds / total : 0)
+        }.sorted { $0.seconds == $1.seconds ? $0.id < $1.id : $0.seconds > $1.seconds }
+    }
+
+    static func keyRecords(from rows: [HourMetric]) -> [UsageRecord] {
+        rows.compactMap { row in
+            guard row.metric.hasPrefix("key:"), row.metric.count > 4,
+                  row.value.isFinite, row.value >= 1, row.value < Double(Int.max) else { return nil }
+            return UsageRecord(day: row.day, appID: row.appID, appName: row.appName,
+                               shortcut: String(row.metric.dropFirst(4)), count: Int(row.value), modifierCounts: [:])
+        }
+    }
+}
+
 struct UsageRecord: Codable {
     var day: String
     var appID: String

@@ -14,6 +14,11 @@ final class UpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     override init() {
         super.init()
+        // Local development identity must never be replaced by a public update.
+        guard Bundle.main.bundleIdentifier == "cc.raycal.ShortcutStats" else {
+            startupError = "本机开发版通过 Xcode 构建更新，不接收公开安装包。"
+            return
+        }
         controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
         controller.updater.publisher(for: \.canCheckForUpdates)
             .receive(on: RunLoop.main)
@@ -39,6 +44,7 @@ final class UpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
 
     func setAutomaticChecks(_ enabled: Bool) {
+        guard let controller else { return }
         controller.updater.automaticallyChecksForUpdates = enabled
     }
 

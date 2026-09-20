@@ -147,7 +147,7 @@
 			"buildSettings" = {
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "cc.raycal.ShortcutStats";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "$(SHORTCUTSTATS_BUNDLE_ID)";
 				"INFOPLIST_FILE" = "Configuration/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"ENABLE_APP_SANDBOX" = "NO";
@@ -180,7 +180,7 @@
 			"buildSettings" = {
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "cc.raycal.ShortcutStats";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "$(SHORTCUTSTATS_BUNDLE_ID)";
 				"INFOPLIST_FILE" = "Configuration/Info.plist";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"ENABLE_APP_SANDBOX" = "NO";

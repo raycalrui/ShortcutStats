@@ -33,7 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.action = #selector(showWindow)
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 920),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "ShortcutStats"
+        window.title = Bundle.main.bundleIdentifier == "cc.raycal.ShortcutStats.local"
+            ? "ShortcutStats（本机开发版）" : "ShortcutStats"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 820, height: 820)
         window.contentView = NSHostingView(rootView: Dashboard(monitor: monitor))
@@ -67,7 +68,7 @@ struct Dashboard: View {
     @State private var startDate = Calendar.current.date(byAdding: .day, value: -6, to: Date())!
     @State private var endDate = Date()
     @State private var search = ""
-    @State private var section = "排行榜"
+    @State private var section = "统计总览"
     @State private var showHidden = false
     @AppStorage("hiddenShortcuts") private var hiddenJSON = "[]"
     private var hidden: Set<String> {
@@ -85,6 +86,9 @@ struct Dashboard: View {
     private var invalidRange: Bool { since > through }
     private var selectedRecords: [UsageRecord] {
         Statistics.filtered(monitor.records, from: since, through: through, appID: appID)
+    }
+    private var selectedActivityRows: [HourMetric] {
+        monitor.activityRows(from: since, through: through, appID: appID)
     }
     private var visibleRecords: [UsageRecord] {
         Statistics.filtered(selectedRecords, from: since, through: through, appID: appID, search: search, hidden: hidden)
@@ -135,11 +139,15 @@ struct Dashboard: View {
                 }
             }
             Picker("统计视图", selection: $section) {
-                ForEach(["排行榜", "每日趋势", "键盘热力图", "键鼠与小时"], id: \.self) { Text($0).tag($0) }
+                ForEach(["统计总览", "排行榜", "应用时长", "每日趋势", "键盘热力图", "键鼠与小时"], id: \.self) { Text($0).tag($0) }
             }.pickerStyle(.segmented)
             if invalidRange {
                 ContentUnavailableView("日期范围无效", systemImage: "calendar", description: Text("开始日期不能晚于结束日期。"))
                     .frame(maxHeight: .infinity)
+            } else if section == "统计总览" {
+                StatisticsOverview(rows: selectedActivityRows, records: selectedRecords)
+            } else if section == "应用时长" {
+                AppUsageRankingView(rows: selectedActivityRows)
             } else if section == "排行榜" {
                 HStack {
                     TextField("搜索组合键，例如 ⌘C 或 Space", text: $search)
@@ -154,9 +162,9 @@ struct Dashboard: View {
             } else if section == "每日趋势" {
                 UsageTrend(records: selectedRecords, from: since, through: through)
             } else if section == "键鼠与小时" {
-                ActivityDashboard(rows: monitor.activityRows(from: since, through: through, appID: appID))
+                ActivityDashboard(rows: selectedActivityRows)
             } else {
-                KeyboardHeatmap(records: selectedRecords)
+                KeyboardHeatmapSection(records: selectedRecords, rows: selectedActivityRows)
             }
             if monitor.waitingForPermission {
                 VStack(alignment: .leading, spacing: 8) {

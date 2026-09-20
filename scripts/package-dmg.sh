@@ -5,8 +5,8 @@ cd "${0:A:h:h}"
 app_path="${1:-$PWD/dist/ShortcutStats.app}"
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app_path/Contents/Info.plist")
 output_path="$PWD/dist/ShortcutStats-${version}.dmg"
+zsh scripts/verify-release-signing.sh "$app_path"
 [[ ! -e "$output_path" ]] || { echo "Refusing to replace $output_path" >&2; exit 1; }
-codesign --verify --deep --strict "$app_path"
 stage_directory=$(mktemp -d "${TMPDIR:-/tmp}/shortcutstats-dmg.XXXXXX")
 trap 'rm -rf "$stage_directory"' EXIT
 ditto "$app_path" "$stage_directory/ShortcutStats.app"

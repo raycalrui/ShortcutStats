@@ -1,6 +1,10 @@
 #!/bin/zsh
 
 set -euo pipefail
+if [[ "${SHORTCUTSTATS_ALLOW_ADHOC_TEST_ONLY:-}" != 1 ]]; then
+    echo 'Ad-hoc signing is disabled for releases: it changes the privacy permission identity on updates. For isolated tests only, set SHORTCUTSTATS_ALLOW_ADHOC_TEST_ONLY=1.' >&2
+    exit 65
+fi
 
 if (( $# != 1 )); then
     echo "Usage: $0 <ShortcutStats.app>" >&2

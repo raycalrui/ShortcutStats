@@ -162,6 +162,10 @@ Detection is delayed and brief interruptions may go unnoticed. Unsaved records c
 
 ## 本地开发签名 / Local development signing
 
+本机自用时，在下述本地配置中额外设置 `SHORTCUTSTATS_BUNDLE_ID = cc.raycal.ShortcutStats.local`，将开发版与公开安装版的权限身份分开。之后在 Xcode 选择 ShortcutStats → My Mac，使用 ⌘R 构建运行；不要在签名方式之间来回切换。本机开发版禁用公开更新，通过 Xcode 更新。首次切换需为开发版授权一次；它与公开版共用原统计数据目录，请勿同时运行两份应用。
+
+For local use, also set `SHORTCUTSTATS_BUNDLE_ID = cc.raycal.ShortcutStats.local` in the local configuration below to separate development and public permission identities. Select ShortcutStats → My Mac in Xcode and use ⌘R; keep the signing configuration consistent. Local builds update through Xcode, with public updates disabled. Grant permission once when switching identities. Both variants share the existing statistics directory, so do not run them simultaneously.
+
 Debug 和 Release 共用 `Configuration/Signing.xcconfig`，默认使用 ad-hoc 签名。需要固定开发身份时，可创建 Git 已忽略的 `Configuration/Signing.local.xcconfig`，设置 `DEVELOPMENT_TEAM` 和 `CODE_SIGN_IDENTITY` 为本机可用的开发团队与证书。不要提交该文件或私钥。证书更新后需同步本地配置。
 
 Debug and Release share `Configuration/Signing.xcconfig`, with ad-hoc signing as the public default. For a stable development identity, create the Git-ignored `Configuration/Signing.local.xcconfig` and set `DEVELOPMENT_TEAM` and `CODE_SIGN_IDENTITY` to your locally available team and certificate. Do not commit this file or private keys. Update the local configuration when renewing the certificate.
@@ -187,13 +191,14 @@ v0.1.0 does not include an updater, so install v0.1.1 or later manually once. Re
 
 ### 发布维护 / Release maintenance
 
-首次构建需要联网解析 Sparkle 2.10.0；依赖已通过 Package.resolved 锁定。公开 ad-hoc 包按以下顺序准备（不要覆盖本地签名配置）：
+首次构建需要联网解析 Sparkle 2.10.0；依赖已通过 Package.resolved 锁定。公开 Developer ID 签名包按以下顺序准备（不要覆盖本地签名配置）：
 
-The first build needs network access to resolve Sparkle 2.10.0, pinned in Package.resolved. Prepare a public ad-hoc build as follows without modifying local signing configuration:
+The first build needs network access to resolve Sparkle 2.10.0, pinned in Package.resolved. Prepare a Developer ID signed public build as follows without modifying local signing configuration:
 
 ```sh
-zsh scripts/build.sh 'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= ENABLE_HARDENED_RUNTIME=NO
-zsh scripts/sign-ad-hoc-release.sh dist/ShortcutStats.app
+# 设置为本机 Developer ID Application 证书指纹（不含私钥）
+export SHORTCUTSTATS_RELEASE_IDENTITY="YOUR_CERTIFICATE_SHA1"
+zsh scripts/build-release.sh
 zsh scripts/package-dmg.sh
 zsh scripts/prepare-update.sh v0.1.1 dist/ShortcutStats-0.1.1.dmg .build/Xcode/SourcePackages/artifacts/sparkle/Sparkle/bin beta
 ```
@@ -245,6 +250,18 @@ The heatmap uses a gamma-2 opacity curve: 10% + 80% × (count / group maximum)²
 
 ## 键鼠、应用时长与小时趋势 / Input, activity and hourly metrics
 
+「统计总览」为默认页面，按顶部日期与应用范围展示全部主键次数、快捷键次数、鼠标点击总数、活跃时长和活跃时长最高的应用。快捷键仍使用完整的每日历史，不与全部主键相加；其他指标仅包含开启采集后的记录。未开启的指标会明确提示，关闭采集不隐藏已有历史。
+
+Overview is the default page. It shows main-key presses, shortcut uses, mouse clicks, active time and the most-used app by active time within the selected date/app range. Shortcut totals retain daily history and are not added to main-key totals. Other metrics only contain data collected after enabling them. Disabled collection is clearly labeled without hiding history.
+
+「应用时长」提供独立排行榜，按活跃时长降序排列，展示时长和占当前筛选范围总时长的比例。支持顶部今天、近 7 天、近 30 天、全部和自定义日期；选择单个应用后占比以该筛选范围为准。它表示实际采集到的前台活跃时长，不是进程运行时间。
+
+App Time ranks apps by collected foreground active time and displays durations and shares of the filtered total. It supports Today, Last 7/30 Days, All and custom dates through the top filters. Selecting one app changes the share denominator accordingly. This measures observed active usage, not process uptime.
+
+「键盘热力图」内可切换「快捷键」与「全部主键」，后者可直接开启采集，包含普通打字和快捷键的主键次数。切换模式清除选中的键位及修饰键筛选；全部主键模式不统计独立修饰键，顶部图标仅代表 F1–F12，不合并独立媒体事件。两种模式均保留原键盘布局与 Gamma 色阶，不推算旧数据。
+
+Keyboard Heatmap switches between Shortcuts and All Main Keys, with a collection toggle for ordinary typing and shortcut main-key counts. Switching clears the selected key and modifier filter. All Main Keys excludes standalone modifiers; top-row icons represent F1–F12 without merging separate media events. Both modes retain the keyboard layout and gamma scale; historical data is never inferred.
+
 在「键鼠与小时」页面分别开启全部主键、鼠标或前台活跃时长。三个开关默认关闭，重启后保留；关闭只停止新增，顶部暂停停止所有采集。日期和应用筛选共用。主键统计包括普通打字、Shift 组合及快捷键的物理主键，每次非自动重复 key-down 计一次，不保存文字或顺序，不单独累计修饰键按下；不与快捷键总数相加。
 
 In Input & Hours, independently enable all main keys, mouse metrics or foreground active time. All three default off and persist across restarts. Disabling stops new collection but keeps history; the main Pause control stops all collection. Date and app filters are shared. Main-key totals include ordinary typing, Shift combinations and shortcut main keys, excluding autorepeat. No text or sequence is stored; modifier-only presses are excluded. Do not add key totals to shortcut totals.
@@ -260,3 +277,9 @@ Foreground active time is sampled about every 2 seconds with a 60-second idle th
 新增汇总保存在 Application Support/ShortcutStats/activity.sqlite，按小时、应用和指标汇总，内存合并后每约 15 秒事务写入，正常退出保存。异常退出可能丢失最近一批。旧 statistics.json 保持原样继续用于快捷键每日历史，不进行破坏性迁移，也不推算旧的小时分布。小时使用绝对时间区分夏令时重复小时，日期筛选遵循采集时本地日期，图表以当前时区显示。空白时段可能未采集，不表示确实零使用。现有 CSV 仍只导出快捷键。
 
 New aggregates live in Application Support/ShortcutStats/activity.sqlite, grouped by hour, app and metric. In-memory deltas are transactionally flushed about every 15 seconds and on normal exit; abnormal termination can lose the latest batch. Existing statistics.json remains the daily shortcut history with no destructive migration or inferred hourly history. Absolute hour timestamps distinguish repeated DST hours; date filtering uses the local date at capture and charts display the current time zone. Missing hours may be unobserved rather than zero usage. Existing CSV exports remain shortcut-only.
+
+### 更新后权限身份 / Permission identity across updates
+
+v0.3.0 及更早的公开包使用 ad-hoc 签名，身份绑定代码哈希，更新可能使旧输入监控授权失效。后续公开打包强制要求稳定的 Developer ID Application 签名；缺少证书时停止发布，不回退 ad-hoc。Sparkle EdDSA 签名不能代替 Apple 代码签名。旧身份首次迁移仍可能需要重新授权一次；稳定身份检查并不代替实际跨版本权限验收。公证仍需另外完成。
+
+Public builds through v0.3.0 used ad-hoc signatures bound to code hashes, potentially invalidating Input Monitoring grants after updates. Future public packaging requires stable Developer ID Application signing and fails rather than falling back to ad-hoc. Sparkle EdDSA signatures do not replace Apple code signing. Initial migration may require one reauthorization; identity verification does not replace real upgrade permission testing. Notarization remains a separate step.

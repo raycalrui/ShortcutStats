@@ -74,6 +74,35 @@ struct UsageTrend: View {
     }
 }
 
+struct KeyboardHeatmapSection: View {
+    let records: [UsageRecord]
+    let rows: [HourMetric]
+    @State private var ordinaryKeys = false
+    @AppStorage("metrics.keyboard") private var keyboardEnabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("热力图范围", selection: $ordinaryKeys) {
+                Text("快捷键").tag(false)
+                Text("全部主键").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 300)
+            if ordinaryKeys {
+                Toggle("采集全部主键", isOn: $keyboardEnabled)
+                Text(keyboardEnabled
+                     ? "仅从开启后开始累计，不补算历史。包含普通打字和快捷键主键；只保存每小时次数，不保存文字或输入顺序。顶部暂停仍会停止采集。"
+                     : "全部主键采集已关闭，当前显示已有历史。开启后开始累计，不补算旧快捷键记录。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            KeyboardHeatmap(records: ordinaryKeys ? ActivitySummary.keyRecords(from: rows) : records,
+                            ordinaryKeys: ordinaryKeys)
+                // A different scope must not inherit a selected key or modifier filter.
+                .id(ordinaryKeys)
+        }.frame(maxHeight: .infinity)
+    }
+}
+
 struct KeyboardHeatmap: View {
     let records: [UsageRecord]
     var ordinaryKeys = false
@@ -175,18 +204,28 @@ struct KeyboardHeatmap: View {
             selectedKey = key
         }
     }
+    private func totals(for records: [UsageRecord]) -> [String: Int] {
+        guard ordinaryKeys else { return Statistics.heatmapTotals(records) }
+        // Hourly keyboard metrics already contain one physical key name. Keep it
+        // intact rather than parsing it as a shortcut or applying media aliases.
+        return records.reduce(into: [:]) { $0[$1.shortcut, default: 0] += $1.count }
+    }
+    private func details(_ records: [UsageRecord], key: String) -> [UsageRecord] {
+        ordinaryKeys ? records.filter { $0.shortcut == key } : Statistics.heatmapDetails(records, key: key)
+    }
     var body: some View {
-        let filteredRecords = Statistics.heatmapRecords(records, modifier: selectedModifier)
-        let totals = Statistics.heatmapTotals(filteredRecords)
+        let filteredRecords = ordinaryKeys ? records : Statistics.heatmapRecords(records, modifier: selectedModifier)
+        let totals = totals(for: filteredRecords)
         let modifiers = Statistics.modifierKeys
         let mainMaximum = totals.filter { !modifiers.contains($0.key) && !$0.key.hasPrefix("?") }.values.max() ?? 0
         let modifierMaximum = totals.filter { modifiers.contains($0.key) && !$0.key.hasPrefix("?") }.values.max() ?? 0
         let peak = max(1, mainMaximum)
-        let extras = Set(totals.keys).union(Statistics.keyTotals(records).keys.filter { modifiers.contains($0) }).filter { !$0.hasPrefix("?") && !keys.filter(\.tracked).map { recordKey($0) }.contains($0) }.sorted()
+        let modifierExtras = ordinaryKeys ? Set<String>() : Set(Statistics.keyTotals(records).keys.filter { modifiers.contains($0) })
+        let extras = Set(totals.keys).union(modifierExtras).filter { !$0.hasPrefix("?") && !keys.filter(\.tracked).map { recordKey($0) }.contains($0) }.sorted()
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(ordinaryKeys ? "主键按下热力图" : "快捷键热力图").font(.title3.bold())
-                Text(ordinaryKeys ? "物理主键按下次数，包含普通打字和快捷键；忽略长按重复。修饰键不单独统计。" : "统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。")
+                Text(ordinaryKeys ? "物理主键按下次数，包含普通打字和快捷键；忽略长按重复，不代表输入字符数。修饰键不单独统计。顶部图标在此模式仅代表 F1–F12 按键，不含独立媒体/亮度事件。" : "统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     if let modifier = selectedModifier {
@@ -207,19 +246,20 @@ struct KeyboardHeatmap: View {
                             .fill(Color.secondary.opacity(0.12))
                         ForEach(keys) { key in
                             let name = recordKey(key)
+                            let tracked = key.tracked && !(ordinaryKeys && modifiers.contains(name))
                             let count = totals[name, default: 0]
                             let keyColor: Color = modifiers.contains(name) ? .orange : .blue
                             let colorPeak = modifiers.contains(name) ? max(1, modifierMaximum) : peak
                             Button { if key.tracked { select(name) } } label: {
                                 legend(key.label, scale: scale)
-                                    .foregroundStyle(key.tracked ? Color.primary : Color.secondary)
+                                    .foregroundStyle(tracked ? Color.primary : Color.secondary)
                                     .frame(width: key.width * scale, height: key.height * scale)
                                     .background(count > 0 && key.tracked ? keyColor.opacity(heatOpacity(Double(count) / Double(colorPeak))) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12 * scale))
                                     .overlay(RoundedRectangle(cornerRadius: 12 * scale).stroke((selectedKey == name || selectedModifier == name) && key.tracked ? keyColor : Color.secondary.opacity(0.25)))
                             }
-                            .buttonStyle(.plain).disabled(!key.tracked || (ordinaryKeys && modifiers.contains(name)))
-                            .help(key.tracked ? keyHelp(name, count: count) : "\(key.label)：不单独统计")
-                            .accessibilityLabel(key.tracked ? keyHelp(name, count: count) : "\(key.label)，不单独统计")
+                            .buttonStyle(.plain).disabled(!tracked)
+                            .help(tracked ? keyHelp(name, count: count) : "\(key.label)：不单独统计")
+                            .accessibilityLabel(tracked ? keyHelp(name, count: count) : "\(key.label)，不单独统计")
                             .offset(x: key.x * scale, y: key.y * scale)
                         }
                     }
@@ -231,7 +271,7 @@ struct KeyboardHeatmap: View {
                 }.font(.caption).foregroundStyle(.secondary)
                 if let key = selectedKey {
                     Text("\(keyTitle(key))：\(totals[key, default: 0]) 次").font(.headline)
-                    ForEach(Statistics.rankings(Statistics.heatmapDetails(filteredRecords, key: key), since: "", appID: "")) { item in
+                    ForEach(Statistics.rankings(details(filteredRecords, key: key), since: "", appID: "")) { item in
                         HStack { Text(item.shortcut); Spacer(); Text("\(item.count) 次") }
                     }
                 }

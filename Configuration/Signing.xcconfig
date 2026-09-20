@@ -1,4 +1,5 @@
 // Public default: build locally without a development team.
+SHORTCUTSTATS_BUNDLE_ID = cc.raycal.ShortcutStats
 CODE_SIGN_STYLE = Manual
 CODE_SIGN_IDENTITY = -
 // Local overrides are intentionally excluded from Git.

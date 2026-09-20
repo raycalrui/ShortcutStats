@@ -188,3 +188,35 @@ try Data("not a database".utf8).write(to: corruptURL)
 var rejectedCorrupt = false
 do { _ = try ActivityStore(url: corruptURL) } catch { rejectedCorrupt = true }
 check(rejectedCorrupt && (try? Data(contentsOf: corruptURL)) == Data("not a database".utf8), "损坏数据库拒绝打开且保护原文件")
+
+// Overview and app rankings must not double-count overlapping hourly/legacy data.
+func overviewMetric(_ metric: String, _ value: Double, app: String = "a", name: String = "A", hour: TimeInterval = 0) -> HourMetric {
+    HourMetric(hour: beforeHour.addingTimeInterval(hour), day: "2026-09-20", appID: app, appName: name, metric: metric, value: value)
+}
+let overviewRows = [
+    overviewMetric("key:A", 8), overviewMetric("key:Space", 2),
+    overviewMetric("shortcut", 4),
+    overviewMetric("mouse.left", 3), overviewMetric("mouse.right", 2), overviewMetric("mouse.other", 1),
+    overviewMetric("mouse.distance", 300), overviewMetric("mouse.scroll.lines", 40),
+    overviewMetric("active.seconds", 60), overviewMetric("active.seconds", 30, name: "Renamed A", hour: 3600),
+    overviewMetric("active.seconds", 30, app: "b", name: "B")
+]
+let overviewLegacy = [UsageRecord(day: "2026-09-19", appID: "a", appName: "A", shortcut: "⌘C", count: 10)]
+let overview = ActivitySummary(rows: overviewRows, records: overviewLegacy)
+check(overview.keyPresses == 10 && overview.shortcutCount == 10, "总览主键与快捷键各自汇总，不加小时快捷键造成重复")
+check(overview.mouseClicks == 6, "总览鼠标点击包含三类按钮但排除移动和滚动")
+check(overview.activeSeconds == 120 && overview.appRankings.map(\.id) == ["a", "b"], "应用时长跨小时合并并降序排名")
+check(overview.appRankings.first?.name == "Renamed A" && overview.appRankings.first?.share == 0.75, "应用按ID归并、最新名称及占比正确")
+let emptyOverview = ActivitySummary(rows: [], records: [])
+check(emptyOverview.appRankings.isEmpty && emptyOverview.activeSeconds == 0 && emptyOverview.keyPresses == 0, "空总览无虚构排名或时长")
+let tiedOverview = ActivitySummary(rows: [overviewMetric("active.seconds", 30, app: "z"), overviewMetric("active.seconds", 30, app: "a")], records: [])
+check(tiedOverview.appRankings.map(\.id) == ["a", "z"], "同分应用排名保持稳定")
+let filteredOverview = ActivitySummary(rows: overviewRows.filter { $0.appID == "b" }, records: [])
+check(filteredOverview.appRankings.count == 1 && filteredOverview.appRankings[0].share == 1 && filteredOverview.activeSeconds == 30, "单应用范围占比以筛选后时长为分母")
+let invalidOverview = ActivitySummary(rows: [overviewMetric("active.seconds", .nan), overviewMetric("key:A", .infinity), overviewMetric("mouse.left", -1)], records: [])
+check(invalidOverview.appRankings.isEmpty && invalidOverview.keyPresses == 0 && invalidOverview.mouseClicks == 0, "非有限或负指标不污染总览")
+let ordinaryRecords = ActivitySummary.keyRecords(from: overviewRows + [overviewMetric("key:", 2), overviewMetric("key:Q", .infinity), overviewMetric("key:W", Double(Int.max))])
+check(ordinaryRecords.map(\.shortcut) == ["A", "Space"] && ordinaryRecords.reduce(0) { $0 + $1.count } == 10, "全部主键热力图只转换有效键盘聚合，不混入快捷键或鼠标")
+check(Statistics.keyTotals(ordinaryRecords) == ["A": 8, "Space": 2], "全部主键热力图不虚构修饰键参与次数")
+let rangeOverviewRows = try metricStore.rows(from: "2026-09-20", through: "2026-09-20", appID: "a")
+check(ActivitySummary(rows: rangeOverviewRows, records: []).activeSeconds == 1, "总览沿用存储日期筛选，不跨日混入活跃时长")
