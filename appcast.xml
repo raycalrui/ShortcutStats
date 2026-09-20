@@ -9,6 +9,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Signed ShortcutStats updates</description>
         <language>zh-CN</language>
         <item>
+            <title>0.3.0</title>
+            <pubDate>Mon, 21 Sep 2026 00:44:29 +0800</pubDate>
+            <link>https://github.com/raycalrui/ShortcutStats/releases/tag/v0.3.0</link>
+            <sparkle:fullReleaseNotesLink>https://github.com/raycalrui/ShortcutStats/releases/tag/v0.3.0</sparkle:fullReleaseNotesLink>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/raycalrui/ShortcutStats/releases/download/v0.3.0/ShortcutStats-0.3.0.dmg" length="2054548" type="application/octet-stream" sparkle:edSignature="iqZXwqLwzSxdUni/JSItBa0WeFlHn/pU34BSj4cnXpmLnZ6M8i8UMJ7MQvfL0y599ALRs62w6s9tJ6wAFeCOAQ=="/>
+        </item>
+        <item>
             <title>0.2.0</title>
             <pubDate>Sun, 20 Sep 2026 14:50:29 +0800</pubDate>
             <link>https://github.com/raycalrui/ShortcutStats/releases/tag/v0.2.0</link>
@@ -33,6 +44,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: tANmTB8vcGXJ4kKGnyPhgf2mN88vGQiYFkdQNL/JoAZ+hTzLGyJomI/sNG9dRo9Zd7uckOzaiXrmN+rFOCX9Bw==
-length: 2410
+edSignature: fJaJn8fuQ7++mkKjGfi8fRN0tabmI2cOpZPSOtL8UxMo+EwiizfkQfyjr/NJ1EJOGXA4+7OESkkwKVvq8cYDBA==
+length: 3298
 -->
