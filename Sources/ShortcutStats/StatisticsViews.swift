@@ -76,6 +76,7 @@ struct UsageTrend: View {
 
 struct KeyboardHeatmap: View {
     let records: [UsageRecord]
+    var ordinaryKeys = false
     @State private var selectedKey: String?
     @State private var selectedModifier: String?
     private struct Key: Identifiable {
@@ -144,8 +145,8 @@ struct KeyboardHeatmap: View {
         }
     }
     private func keyTitle(_ key: String) -> String {
-        if key == "F11" { return "音量降低 / F11" }
-        if key == "F12" { return "音量增加 / F12" }
+        if !ordinaryKeys && key == "F11" { return "音量降低 / F11" }
+        if !ordinaryKeys && key == "F12" { return "音量增加 / F12" }
         guard Statistics.modifierKeys.contains(key) else { return key }
         let side = key.hasPrefix("L") ? "左" : key.hasPrefix("R") ? "右" : "左右未知"
         return "\(key.dropFirst())（\(side)）"
@@ -167,6 +168,7 @@ struct KeyboardHeatmap: View {
     }
     private func select(_ key: String) {
         if Statistics.modifierKeys.contains(key) {
+            guard !ordinaryKeys else { return }
             selectedModifier = selectedModifier == key ? nil : key
             selectedKey = nil
         } else {
@@ -183,15 +185,15 @@ struct KeyboardHeatmap: View {
         let extras = Set(totals.keys).union(Statistics.keyTotals(records).keys.filter { modifiers.contains($0) }).filter { !$0.hasPrefix("?") && !keys.filter(\.tracked).map { recordKey($0) }.contains($0) }.sorted()
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("快捷键热力图").font(.title3.bold())
-                Text("统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。")
+                Text(ordinaryKeys ? "主键按下热力图" : "快捷键热力图").font(.title3.bold())
+                Text(ordinaryKeys ? "物理主键按下次数，包含普通打字和快捷键；忽略长按重复。修饰键不单独统计。" : "统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     if let modifier = selectedModifier {
                         Text("正在筛选：\(keyTitle(modifier))").font(.headline).foregroundStyle(.orange)
                         Button("取消筛选") { selectedModifier = nil; selectedKey = nil }
                     } else {
-                        Text("点击修饰键筛选，再次点击取消").foregroundStyle(.secondary)
+                        Text(ordinaryKeys ? "点击主键查看次数" : "点击修饰键筛选，再次点击取消").foregroundStyle(.secondary)
                     }
                 }
                 if selectedModifier != nil {
@@ -215,7 +217,7 @@ struct KeyboardHeatmap: View {
                                     .background(count > 0 && key.tracked ? keyColor.opacity(heatOpacity(Double(count) / Double(colorPeak))) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12 * scale))
                                     .overlay(RoundedRectangle(cornerRadius: 12 * scale).stroke((selectedKey == name || selectedModifier == name) && key.tracked ? keyColor : Color.secondary.opacity(0.25)))
                             }
-                            .buttonStyle(.plain).disabled(!key.tracked)
+                            .buttonStyle(.plain).disabled(!key.tracked || (ordinaryKeys && modifiers.contains(name)))
                             .help(key.tracked ? keyHelp(name, count: count) : "\(key.label)：不单独统计")
                             .accessibilityLabel(key.tracked ? keyHelp(name, count: count) : "\(key.label)，不单独统计")
                             .offset(x: key.x * scale, y: key.y * scale)
@@ -224,8 +226,8 @@ struct KeyboardHeatmap: View {
                 }.aspectRatio(1922.0 / 764.0, contentMode: .fit)
                 VStack(alignment: .leading, spacing: 6) {
                     colorLegend("主键", color: .blue, maximum: mainMaximum)
-                    colorLegend("修饰键", color: .orange, maximum: modifierMaximum)
-                    Text("两组独立色阶：浅色使用较少，深色使用较多；跨组深浅不代表相同次数。")
+                    if !ordinaryKeys { colorLegend("修饰键", color: .orange, maximum: modifierMaximum) }
+                    Text(ordinaryKeys ? "浅色使用较少，深色使用较多。" : "两组独立色阶：浅色使用较少，深色使用较多；跨组深浅不代表相同次数。")
                 }.font(.caption).foregroundStyle(.secondary)
                 if let key = selectedKey {
                     Text("\(keyTitle(key))：\(totals[key, default: 0]) 次").font(.headline)
@@ -239,7 +241,7 @@ struct KeyboardHeatmap: View {
                         ForEach(extras, id: \.self) { key in keycap(key, label: keyTitle(key), count: totals[key, default: 0], peak: modifiers.contains(key) ? max(1, totals.filter { modifiers.contains($0.key) && !$0.key.hasPrefix("?") }.values.max() ?? 0) : peak) }
                     }
                 }
-                if filteredRecords.isEmpty { Text(selectedModifier == nil ? "此范围没有快捷键记录。" : "此范围没有使用该侧修饰键的记录。").foregroundStyle(.secondary) }
+                if filteredRecords.isEmpty { Text(selectedModifier == nil ? (ordinaryKeys ? "此范围没有主键记录。" : "此范围没有快捷键记录。") : "此范围没有使用该侧修饰键的记录。").foregroundStyle(.secondary) }
             }.padding(.vertical, 8)
         }.frame(maxHeight: .infinity)
     }

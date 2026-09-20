@@ -78,7 +78,7 @@ struct Dashboard: View {
     }
     private var since: String {
         if days == -1 { return Statistics.dayString(startDate) }
-        if days == 0 { return monitor.records.map(\.day).min() ?? Statistics.dayString(Date()) }
+        if days == 0 { return (monitor.records.map(\.day) + monitor.activityRows(from: "", through: "9999", appID: "").map(\.day)).min() ?? Statistics.dayString(Date()) }
         return Statistics.dayString(Calendar.current.date(byAdding: .day, value: -(days - 1), to: Date())!)
     }
     private var through: String { Statistics.dayString(days == -1 ? endDate : Date()) }
@@ -93,6 +93,7 @@ struct Dashboard: View {
     private var apps: [(id: String, name: String)] {
         var result: [String: String] = [:]
         for record in monitor.records { result[record.appID] = record.appName }
+        for row in monitor.activityRows(from: "", through: "9999", appID: "") { result[row.appID] = row.appName }
         return result.map { (id: $0.key, name: $0.value) }.sorted { $0.name < $1.name }
     }
 
@@ -134,7 +135,7 @@ struct Dashboard: View {
                 }
             }
             Picker("统计视图", selection: $section) {
-                ForEach(["排行榜", "每日趋势", "键盘热力图"], id: \.self) { Text($0).tag($0) }
+                ForEach(["排行榜", "每日趋势", "键盘热力图", "键鼠与小时"], id: \.self) { Text($0).tag($0) }
             }.pickerStyle(.segmented)
             if invalidRange {
                 ContentUnavailableView("日期范围无效", systemImage: "calendar", description: Text("开始日期不能晚于结束日期。"))
@@ -152,6 +153,8 @@ struct Dashboard: View {
                 RankingList(ranking: ranking) { shortcut in setHidden(hidden.union([shortcut])) }
             } else if section == "每日趋势" {
                 UsageTrend(records: selectedRecords, from: since, through: through)
+            } else if section == "键鼠与小时" {
+                ActivityDashboard(rows: monitor.activityRows(from: since, through: through, appID: appID))
             } else {
                 KeyboardHeatmap(records: selectedRecords)
             }
@@ -166,6 +169,7 @@ struct Dashboard: View {
                 }
             }
             if let message = monitor.errorMessage { Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let activityError = monitor.activityError { Text(activityError).font(.caption).foregroundStyle(.red) }
             if let historyError = monitor.historyError { Text(historyError).font(.caption).foregroundStyle(.red) }
             Divider()
             VStack(alignment: .leading, spacing: 12) {

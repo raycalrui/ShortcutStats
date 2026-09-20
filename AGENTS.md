@@ -54,9 +54,9 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 
 - 保持被动监听，不吞掉、重写或注入用户按键。
 - 统计含 Command、Option 或 Control 的 key-down，以及独立 F1–F20 和白名单内的系统媒体/亮度事件，Shift 可作为附加修饰键；忽略系统自动重复，手动重复分别计数。
-- 当前按美式 QWERTY 物理键位命名。普通单键、仅 Shift 普通组合、Fn 本身及多段快捷键语义不属于已支持范围。系统事件以功能名称保存，不推算物理 F 键位置；部分搜索/听写/专注模式可能没有可识别事件。
+- 当前按美式 QWERTY 物理键位命名。普通单键和仅 Shift 普通组合可通过独立开关进入全部主键汇总，不进入快捷键排行榜；Fn 本身及多段快捷键语义不属于已支持范围。系统事件以功能名称保存，不推算物理 F 键位置；部分搜索/听写/专注模式可能没有可识别事件。
 - 应用归属指按键时的前台应用，不等于实际处理快捷键的应用；计数代表按键尝试，不证明命令执行成功。
-- 不保存输入正文、普通打字、按键顺序、窗口标题或网页地址，不添加遥测、统计数据上传或账号系统。检查更新仅访问 GitHub 上的签名更新列表和安装包。
+- 不保存输入正文、原始普通打字事件、按键顺序、窗口标题或网页地址，不添加遥测、统计数据上传或账号系统。检查更新仅访问 GitHub 上的签名更新列表和安装包。
 - 不绕过输入监控权限或安全输入保护，不替用户重置权限数据库。安全输入期间的缺失不得伪装成完整统计。
 - 事件回调保持轻量；避免逐次写盘、扫描菜单、执行耗时 I/O 或频繁刷新整个界面。
 - 扩展统计范围时，先明确计数口径及对隐私、历史排名的影响，再实现并同步文档。
@@ -99,3 +99,11 @@ Main keys use blue and modifiers use orange with independent scales. New records
 音量增加/降低事件在热力图中分别与 F12/F11 合并展示，点击查看原始操作明细；排行榜和持久化数据不合并。这是参考键盘上的展示分组，不推断真实物理事件来源，修饰键筛选继续生效。
 
 Volume Up/Down events are grouped with F12/F11 in the heatmap, with original actions retained in click-through details. Rankings and stored records remain separate. This is a presentation grouping for the reference keyboard, not an inference about the physical source; modifier filtering still applies.
+
+## 扩展小时统计
+
+- `ActivityStore.swift` 使用系统 SQLite3，按绝对小时、采集本地日期、应用、指标聚合；保留 legacy statistics.json，禁止将旧每日记录伪造成小时记录。15 秒批量事务写入，失败保留 pending，显示错误。
+- `InputMetrics.swift` 只解码物理键位与鼠标汇总；`ActiveTimeTracker.swift` 为纯采样状态机，60 秒空闲阈值，超过 5 秒的采样间隔不补算；`ActivityViews.swift` 为扩展统计界面。
+- 普通主键、鼠标、活跃时长默认独立关闭，使用 AppStorage/UserDefaults 开关；保持全局暂停、安全输入、锁屏和睡眠约束。不得保存文字、输入顺序、鼠标坐标或轨迹。
+- 移动为事件单位，连续滚动为点、离散滚动为行，所有轴的绝对增量分别累计。不能宣称真实距离或打字字符数。
+- 独立检查包含 InputMetricsChecks、ActiveTimeChecks 与 SQLite 隔离临时库测试；真实设备、锁屏、睡眠及高频鼠标功耗仍需实机验收。

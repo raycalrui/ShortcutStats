@@ -3,6 +3,37 @@ import Carbon
 import Combine
 
 final class Monitor: ObservableObject {
+    @Published var activityRevision = 0
+    @Published var activityError: String?
+    private var activityStore: ActivityStore?
+    private let activeTracker = ActiveTimeTracker()
+    private var sessionInactive = false
+    private var screenLocked = false
+    private var screenSleeping = false
+    private var preferencesObserver: NSObjectProtocol?
+    private var lockObservers: [NSObjectProtocol] = []
+    private var metricsSave = Date.distantPast
+    private(set) var keyboardMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.keyboard")
+    private(set) var mouseMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.mouse")
+    private(set) var activeMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.active")
+    func activityRows(from: String, through: String, appID: String) -> [HourMetric] {
+        do { return try activityStore?.rows(from: from, through: through, appID: appID) ?? [] }
+        catch {
+            let message = "扩展统计读取失败：\(error.localizedDescription)"
+            if activityError != message { DispatchQueue.main.async { [weak self] in self?.activityError = message } }
+            return []
+        }
+    }
+    private func sampleActivity() {
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~UInt32(0))!)
+        let slices = activeTracker.sample(at: Date(), uptime: ProcessInfo.processInfo.systemUptime,
+            appID: foregroundID, appName: foregroundName, enabled: activeMetricsEnabled,
+            eligible: running && wantsTracking && !sleeping && !sessionInactive && !screenLocked && !screenSleeping && !IsSecureEventInputEnabled(), idleSeconds: idle)
+        for slice in slices { activityStore?.add(slice) }
+    }
+    private func flushActivity() {
+        do { try activityStore?.flush() } catch { activityError = "扩展统计保存失败：\(error.localizedDescription)" }
+    }
     @Published var days = 7
     @Published var selectedAppID = ""
     @Published var records: [UsageRecord] = []
@@ -54,8 +85,14 @@ final class Monitor: ObservableObject {
     private let file: URL
 
     init() {
+        if let session = CGSessionCopyCurrentDictionary() as? [String: Any] {
+            sessionInactive = !(session[kCGSessionOnConsoleKey as String] as? Bool ?? false)
+            screenLocked = session["CGSSessionScreenIsLocked"] as? Bool ?? false
+        } else { sessionInactive = true }
         file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ShortcutStats/statistics.json")
+        do { activityStore = try ActivityStore(url: file.deletingLastPathComponent().appendingPathComponent("activity.sqlite")) }
+        catch { activityError = "扩展统计数据库不可用，停止新增扩展统计：\(error.localizedDescription)" }
         do {
             if FileManager.default.fileExists(atPath: file.path) {
                 let loaded = try JSONDecoder().decode([UsageRecord].self, from: Data(contentsOf: file))
@@ -75,9 +112,42 @@ final class Monitor: ObservableObject {
             historyReadable = false
             historyError = "中断记录读取失败，保留原文件：\(error.localizedDescription)"
         }
+        let distributed = DistributedNotificationCenter.default()
+        for (name, locked) in [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)] {
+            lockObservers.append(distributed.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] _ in
+                self?.screenLocked = locked
+                self?.activeTracker.reset()
+            })
+        }
+        preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            let mouse = UserDefaults.standard.bool(forKey: "metrics.mouse")
+            let keyboard = UserDefaults.standard.bool(forKey: "metrics.keyboard")
+            let active = UserDefaults.standard.bool(forKey: "metrics.active")
+            if self.activeMetricsEnabled != active { self.activeTracker.reset() }
+            let rebuild = self.mouseMetricsEnabled != mouse
+            self.keyboardMetricsEnabled = keyboard
+            self.mouseMetricsEnabled = mouse
+            self.activeMetricsEnabled = active
+            if rebuild { self.tearDownTap(); self.lastAttempt = .distantPast; self.reconcile() }
+        }
         let center = NSWorkspace.shared.notificationCenter
+        for (name, off) in [(NSWorkspace.screensDidSleepNotification, true), (NSWorkspace.screensDidWakeNotification, false)] {
+            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.screenSleeping = off
+                self?.activeTracker.reset()
+            })
+        }
+        for (name, inactive) in [(NSWorkspace.sessionDidResignActiveNotification, true), (NSWorkspace.sessionDidBecomeActiveNotification, false)] {
+            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.sessionInactive = inactive
+                self?.activeTracker.reset()
+            })
+        }
         workspaceObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
+            self.activeTracker.reset()
+            self.flushActivity()
             self.sleeping = true
             self.reconcile()
             self.save()
@@ -96,6 +166,12 @@ final class Monitor: ObservableObject {
         ) { [weak self] _ in self?.updateForeground() }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             guard let self else { return }
+            self.sampleActivity()
+            self.activityRevision &+= 1
+            if Date().timeIntervalSince(self.metricsSave) >= 15 {
+                self.flushActivity()
+                self.metricsSave = Date()
+            }
             if self.dirty { self.records = Array(self.counts.values) }
             if Date().timeIntervalSince(self.lastSave) >= 15 { self.save() }
             self.reconcile()
@@ -105,9 +181,11 @@ final class Monitor: ObservableObject {
 
     private func key(_ r: UsageRecord) -> String { "\(r.day)\u{1F}\(r.appID)\u{1F}\(r.shortcut)" }
     private func updateForeground() {
+        sampleActivity()
         let app = NSWorkspace.shared.frontmostApplication
         foregroundID = app?.bundleIdentifier ?? "unknown"
         foregroundName = app?.localizedName ?? "Unknown"
+        sampleActivity()
     }
 
     func restoreTracking() {
@@ -173,14 +251,14 @@ final class Monitor: ObservableObject {
                     if monitor.wantsTracking { monitor.transition(.fault) }
                     monitor.reconcile()
                 }
-            } else if type == .keyDown || type.rawValue == 14 {
+            } else {
                 monitor.receive(event)
             }
             return Unmanaged.passUnretained(event)
         }
         guard let newTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap, place: .tailAppendEventTap, options: .listenOnly,
-            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue) | CGEventMask(1 << 14),
+            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue) | CGEventMask(1 << 14) | (mouseMetricsEnabled ? InputMetrics.eventMask : 0),
             callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
             transition(.fault)
@@ -204,6 +282,9 @@ final class Monitor: ObservableObject {
     }
 
     func stop(persistPause: Bool = true) {
+        sampleActivity()
+        activeTracker.reset()
+        flushActivity()
         if persistPause {
             wantsTracking = false
             UserDefaults.standard.set(true, forKey: "trackingPaused")
@@ -232,7 +313,15 @@ final class Monitor: ObservableObject {
     }
 
     private func receive(_ event: CGEvent) {
-        guard running, wantsTracking, !sleeping, !IsSecureEventInputEnabled(), let shortcut = Self.shortcut(for: event) else { return }
+        // Avoid work for high-rate pointer events when mouse collection is off.
+        if event.type != .keyDown && event.type.rawValue != 14 && !mouseMetricsEnabled { return }
+        guard running, wantsTracking, !sleeping, !sessionInactive, !screenLocked, !screenSleeping, !IsSecureEventInputEnabled() else { return }
+        let now = Date()
+        for delta in InputMetrics.decode(event, keyboard: keyboardMetricsEnabled, mouse: mouseMetricsEnabled) {
+            activityStore?.add(delta, at: now, appID: foregroundID, appName: foregroundName)
+        }
+        guard let shortcut = Self.shortcut(for: event) else { return }
+        activityStore?.add(MetricDelta(metric: "shortcut", value: 1), at: now, appID: foregroundID, appName: foregroundName)
         let record = UsageRecord(day: formatter.string(from: Date()), appID: foregroundID,
                                  appName: foregroundName, shortcut: shortcut, count: 1,
                                  modifierCounts: event.type == .keyDown ? Statistics.modifierCounts(flags: event.flags.rawValue) : [:])

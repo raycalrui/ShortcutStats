@@ -140,3 +140,51 @@ check(Statistics.heatmapTotals(volumeRows)["F12"] == 6 && Statistics.heatmapTota
 check(Statistics.heatmapTotals(volumeRows)["音量增加"] == nil, "音量不重复显示在额外键位")
 check(Statistics.heatmapDetails(volumeRows, key: "F12").map(\.count) == [4, 2], "音量键明细保留操作与 F 键")
 check(Statistics.heatmapTotals(Statistics.heatmapRecords(volumeRows, modifier: "L⌘")).isEmpty, "修饰键筛选不混入无修饰音量事件")
+
+runInputMetricsChecks()
+runActiveTimeChecks()
+
+let activityTestDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("ShortcutStats-metrics-" + UUID().uuidString)
+defer { try? FileManager.default.removeItem(at: activityTestDirectory) }
+let activityURL = activityTestDirectory.appendingPathComponent("test.sqlite")
+var metricCalendar = Calendar(identifier: .gregorian)
+metricCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
+let beforeHour = metricCalendar.date(from: DateComponents(year: 2026, month: 9, day: 20, hour: 23, minute: 59, second: 59))!
+let metricStore = try ActivityStore(url: activityURL)
+metricStore.add(MetricDelta(metric: "key:A", value: 2), at: beforeHour, appID: "a", appName: "A", calendar: metricCalendar)
+metricStore.add(MetricDelta(metric: "key:A", value: 3), at: beforeHour, appID: "a", appName: "A", calendar: metricCalendar)
+metricStore.add(ActivitySlice(start: beforeHour, end: beforeHour.addingTimeInterval(2), appID: "a", appName: "A"), calendar: metricCalendar)
+let pendingMetrics = try metricStore.rows(from: "", through: "9999", appID: "")
+check(pendingMetrics.filter { $0.metric == "key:A" }.reduce(0) { $0 + $1.value } == 5, "待写入指标正确合并")
+check(pendingMetrics.filter { $0.metric == "active.seconds" }.count == 2, "活跃时长跨小时跨日拆分")
+try metricStore.flush()
+try metricStore.flush()
+let reopenedMetricStore = try ActivityStore(url: activityURL)
+let storeCheck1 = try reopenedMetricStore.rows(from: "2026-09-20", through: "2026-09-20", appID: "a").reduce(0) { $0 + $1.value } == 6
+check(storeCheck1, "数据库重开与单日筛选不重复写入")
+let storeCheck2 = try reopenedMetricStore.rows(from: "", through: "9999", appID: "other").isEmpty
+check(storeCheck2, "数据库应用筛选隔离")
+metricStore.add(MetricDelta(metric: "key:A", value: 1), at: beforeHour, appID: "a", appName: "A", calendar: metricCalendar)
+try metricStore.flush()
+let storeCheck3 = try reopenedMetricStore.rows(from: "", through: "9999", appID: "a").filter { $0.metric == "key:A" }.first?.value == 6
+check(storeCheck3, "新一批增加已有小时聚合")
+metricStore.add(MetricDelta(metric: "key:A", value: .infinity), at: beforeHour, appID: "a", appName: "A")
+let storeCheck4 = try metricStore.rows(from: "", through: "9999", appID: "a").filter { $0.metric == "key:A" }.reduce(0) { $0 + $1.value } == 6
+check(storeCheck4, "无效数值不污染存储")
+
+metricStore.add(MetricDelta(metric: "key:A", value: 2), at: beforeHour, appID: "a", appName: "A", calendar: metricCalendar)
+let combinedMetrics = try metricStore.rows(from: "", through: "9999", appID: "a")
+check(combinedMetrics.filter { $0.metric == "key:A" }.count == 1 && combinedMetrics.first { $0.metric == "key:A" }?.value == 8, "磁盘与待写入同桶只有一个身份")
+var dstCalendar = Calendar(identifier: .gregorian)
+dstCalendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+let iso = ISO8601DateFormatter()
+for date in [iso.date(from: "2026-11-01T08:30:00Z")!, iso.date(from: "2026-11-01T09:30:00Z")!] {
+    metricStore.add(MetricDelta(metric: "mouse.left", value: 1), at: date, appID: "dst", appName: "DST", calendar: dstCalendar)
+}
+let dstRows = try metricStore.rows(from: "2026-11-01", through: "2026-11-01", appID: "dst")
+check(dstRows.count == 2 && Set(dstRows.map(\.hour)).count == 2, "夏令时重复小时保留独立时间桶")
+let corruptURL = activityTestDirectory.appendingPathComponent("corrupt.sqlite")
+try Data("not a database".utf8).write(to: corruptURL)
+var rejectedCorrupt = false
+do { _ = try ActivityStore(url: corruptURL) } catch { rejectedCorrupt = true }
+check(rejectedCorrupt && (try? Data(contentsOf: corruptURL)) == Data("not a database".utf8), "损坏数据库拒绝打开且保护原文件")
