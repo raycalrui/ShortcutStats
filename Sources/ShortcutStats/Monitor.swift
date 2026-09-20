@@ -173,14 +173,14 @@ final class Monitor: ObservableObject {
                     if monitor.wantsTracking { monitor.transition(.fault) }
                     monitor.reconcile()
                 }
-            } else if type == .keyDown {
+            } else if type == .keyDown || type.rawValue == 14 {
                 monitor.receive(event)
             }
             return Unmanaged.passUnretained(event)
         }
         guard let newTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap, place: .tailAppendEventTap, options: .listenOnly,
-            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
+            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue) | CGEventMask(1 << 14),
             callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
             transition(.fault)
@@ -234,22 +234,41 @@ final class Monitor: ObservableObject {
     private func receive(_ event: CGEvent) {
         guard running, wantsTracking, !sleeping, !IsSecureEventInputEnabled(), let shortcut = Self.shortcut(for: event) else { return }
         let record = UsageRecord(day: formatter.string(from: Date()), appID: foregroundID,
-                                 appName: foregroundName, shortcut: shortcut, count: 1)
+                                 appName: foregroundName, shortcut: shortcut, count: 1,
+                                 modifierCounts: event.type == .keyDown ? Statistics.modifierCounts(flags: event.flags.rawValue) : [:])
         let id = key(record)
-        if counts[id] != nil { counts[id]!.count += 1 } else { counts[id] = record }
+        if counts[id] != nil { counts[id]!.addOccurrence(modifiers: record.modifierCounts ?? [:]) } else { counts[id] = record }
         dirty = true
     }
 
     static func shortcut(for event: CGEvent) -> String? {
+        // NX_SYSDEFINED / NX_SUBTYPE_AUX_CONTROL_BUTTONS, passive same-tap delivery.
+        if event.type.rawValue == 14 {
+            guard let native = NSEvent(cgEvent: event), native.type == .systemDefined else { return nil }
+            return mediaShortcut(subtype: Int(native.subtype.rawValue), data: native.data1)
+        }
         guard event.type == .keyDown, event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return nil }
         let flags = event.flags
-        guard flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate) else { return nil }
         let code = event.getIntegerValueField(.keyboardEventKeycode)
+        let isFunction = Self.keyNames[code].map { name in
+            name.hasPrefix("F") && Int(name.dropFirst()).map { (1...20).contains($0) } == true
+        } ?? false
+        guard isFunction || flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskAlternate) else { return nil }
         let prefix = (flags.contains(.maskControl) ? "⌃" : "")
             + (flags.contains(.maskAlternate) ? "⌥" : "")
             + (flags.contains(.maskShift) ? "⇧" : "")
             + (flags.contains(.maskCommand) ? "⌘" : "")
         return prefix + (Self.keyNames[code] ?? "Key\(code)")
+    }
+
+    static func mediaShortcut(subtype: Int, data: Int) -> String? {
+        // IOKit auxiliary button payload: high word = key type; low byte = repeat;
+        // next byte = NX_KEYDOWN (0x0a) or NX_KEYUP (0x0b).
+        guard subtype == 8, (data >> 8) & 0xff == 0x0a, data & 0xff == 0 else { return nil }
+        return [0: "音量增加", 1: "音量降低", 2: "亮度增加", 3: "亮度降低",
+                7: "静音", 16: "播放/暂停", 17: "下一首", 18: "上一首",
+                19: "快进", 20: "快退", 21: "键盘背光增加", 22: "键盘背光降低",
+                23: "键盘背光切换"][data >> 16 & 0xffff]
     }
 
     func save() {
@@ -263,13 +282,13 @@ final class Monitor: ObservableObject {
         } catch { errorMessage = "保存失败：\(error.localizedDescription)" }
     }
 
-    func export(since: String, appID: String) {
+    func export(since: String, through: String = "9999-12-31", appID: String, search: String = "", hidden: Set<String> = []) {
         records = Array(counts.values)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "ShortcutStats-\(formatter.string(from: Date())).csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let selected = records.filter { $0.day >= since && (appID.isEmpty || $0.appID == appID) }
+            let selected = Statistics.filtered(records, from: since, through: through, appID: appID, search: search, hidden: hidden)
             try Statistics.csv(selected).write(to: url, atomically: true, encoding: .utf8)
         } catch { errorMessage = "导出失败：\(error.localizedDescription)" }
     }

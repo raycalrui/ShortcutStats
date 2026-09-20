@@ -16,6 +16,7 @@
 | `Sources/ShortcutStats/ShortcutStatsApp.swift` | 应用入口、菜单栏、窗口生命周期和排行榜界面 |
 | `Sources/ShortcutStats/Monitor.swift` | 输入监控权限、事件监听、应用归属、计数及本地保存 |
 | `Sources/ShortcutStats/TrackingHealth.swift` | 状态判定、暂停优先级和中断记录模型 |
+| `Sources/ShortcutStats/StatisticsViews.swift` | 排行榜组件、每日趋势及快捷键热力图 |
 | `Sources/ShortcutStats/Statistics.swift` | 排名汇总、筛选和 CSV 编码 |
 | `Configuration/Info.plist` | App 元数据与菜单栏应用配置 |
 | `ShortcutStats.xcodeproj` | App target、构建配置和共享 Scheme |
@@ -52,8 +53,8 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 ## 统计与隐私约束
 
 - 保持被动监听，不吞掉、重写或注入用户按键。
-- 当前仅统计含 Command、Option 或 Control 的 key-down，Shift 可作为附加修饰键；忽略系统自动重复，手动重复分别计数。
-- 当前按美式 QWERTY 物理键位命名。单键、仅 Shift、媒体键、Fn 特殊操作及多段快捷键语义不属于已支持范围。
+- 统计含 Command、Option 或 Control 的 key-down，以及独立 F1–F20 和白名单内的系统媒体/亮度事件，Shift 可作为附加修饰键；忽略系统自动重复，手动重复分别计数。
+- 当前按美式 QWERTY 物理键位命名。普通单键、仅 Shift 普通组合、Fn 本身及多段快捷键语义不属于已支持范围。系统事件以功能名称保存，不推算物理 F 键位置；部分搜索/听写/专注模式可能没有可识别事件。
 - 应用归属指按键时的前台应用，不等于实际处理快捷键的应用；计数代表按键尝试，不证明命令执行成功。
 - 不保存输入正文、普通打字、按键顺序、窗口标题或网页地址，不添加遥测、统计数据上传或账号系统。检查更新仅访问 GitHub 上的签名更新列表和安装包。
 - 不绕过输入监控权限或安全输入保护，不替用户重置权限数据库。安全输入期间的缺失不得伪装成完整统计。
@@ -87,3 +88,10 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 - 构建 ad-hoc 公开包时使用命令行 `ENABLE_HARDENED_RUNTIME=NO CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=`，之后运行 `scripts/sign-ad-hoc-release.sh`。本机开发签名及项目 hardened runtime 默认值保持原样。
 - DMG 用 `scripts/package-dmg.sh` 生成；更新列表用 `scripts/prepare-update.sh` 生成。先上传对应 Release 附件并验证，再推送引用该附件的 appcast，避免用户收到失效下载。
 - 不把 ad-hoc / EdDSA 更新签名等同于 Developer ID 或 Apple 公证。完整安装更新验收用隔离测试副本，避免替换用户正在使用的 App 或真实数据。
+
+- 日期筛选包含起止日；排行榜搜索和隐藏只影响展示及明确标注的排行榜导出。趋势与热力图保持日期/应用范围的完整记录。隐藏项目保存在 UserDefaults，不改原始计数。热力图只代表键位参与快捷键的频率，不得称为全部打字热力图。
+
+
+热力图主键为蓝色，修饰键为橙色，两组独立色阶。新记录根据每次事件的设备标志区分左右 ⌘、⌥、⌃、⇧；旧记录或缺少左右标志的输入仍在数据中保留未知计数，但热力图不显示未知项，也不推算两侧。两侧同时按住时各计一次参与，排行榜仍合并组合键。Fn、Caps Lock、锁定键不统计。可选 modifierCounts 字段保存每条聚合记录的左右及未知次数，旧数据兼容读取；CSV 仍导出合并后的组合键次数。
+
+Main keys use blue and modifiers use orange with independent scales. New records use each event's device flags to distinguish left/right Command, Option, Control and Shift. Legacy records and events without side flags retain unknown counts internally; the heatmap hides them and never assigns them to either side. Holding both sides counts one participation per side; shortcut rankings remain merged. Fn, Caps Lock and Lock remain untracked. The optional modifierCounts field stores sided and unknown aggregate counts and supports legacy data. CSV continues to export merged shortcut counts.
