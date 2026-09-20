@@ -1,11 +1,24 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>ShortcutStats Updates</title>
         <link>https://github.com/raycalrui/ShortcutStats/releases</link>
         <description>Signed ShortcutStats updates</description>
         <language>zh-CN</language>
+        <item>
+            <title>0.2.0</title>
+            <pubDate>Sun, 20 Sep 2026 14:50:29 +0800</pubDate>
+            <link>https://github.com/raycalrui/ShortcutStats/releases/tag/v0.2.0</link>
+            <sparkle:fullReleaseNotesLink>https://github.com/raycalrui/ShortcutStats/releases/tag/v0.2.0</sparkle:fullReleaseNotesLink>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/raycalrui/ShortcutStats/releases/download/v0.2.0/ShortcutStats-0.2.0.dmg" length="1870802" type="application/octet-stream" sparkle:edSignature="unRSBX6nHjYbK8phS0O6yasUZthE/IFPedudJyEieOTp0jS+aHMlQiC9+hmV1LMuJR2wxA9NQEdjVXZdQDVyBg=="/>
+        </item>
         <item>
             <title>0.1.1</title>
             <pubDate>Sat, 19 Sep 2026 22:11:51 +0800</pubDate>
@@ -15,10 +28,11 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:version>2</sparkle:version>
             <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/raycalrui/ShortcutStats/releases/download/v0.1.1/ShortcutStats-0.1.1.dmg" length="1566235" type="application/octet-stream" sparkle:edSignature="LEeoNWe4rvF9kL91yMVR3lr1e8+xXRnoiI7LfYBv0bSdL55rTkPtNIEgcVUU94rrq8ypLW4Tasu5xf4PUdmODg=="></enclosure>
+            <enclosure url="https://github.com/raycalrui/ShortcutStats/releases/download/v0.1.1/ShortcutStats-0.1.1.dmg" length="1566235" type="application/octet-stream" sparkle:edSignature="LEeoNWe4rvF9kL91yMVR3lr1e8+xXRnoiI7LfYBv0bSdL55rTkPtNIEgcVUU94rrq8ypLW4Tasu5xf4PUdmODg=="/>
         </item>
     </channel>
-</rss><!-- sparkle-signatures:
-edSignature: WCZiHRNwCnrQ4cZg7DCmosLfklvFsi66hV+nyKi8Dk0IjpmnDeU/wtOLe16Rd/0xoEvOFzVtJbiqC+dA/7GoAQ==
-length: 1530
+</rss>
+<!-- sparkle-signatures:
+edSignature: tANmTB8vcGXJ4kKGnyPhgf2mN88vGQiYFkdQNL/JoAZ+hTzLGyJomI/sNG9dRo9Zd7uckOzaiXrmN+rFOCX9Bw==
+length: 2410
 -->
