@@ -134,3 +134,9 @@ check(Statistics.heatmapRecords(selectionRows, modifier: "R⌘").first?.count ==
 check(Statistics.heatmapRecords(selectionRows, modifier: nil).first?.count == 10, "取消恢复原始次数")
 check(Statistics.heatmapRecords(selectionRows, modifier: "L⌥").isEmpty, "无匹配修饰键为空")
 check(Statistics.heatmapRecords([sided], modifier: "L⌘").first?.count == 1, "未知历史不混入左右筛选")
+
+let volumeRows = [UsageRecord(day: "2026-09-20", appID: "test", appName: "Test", shortcut: "音量增加", count: 4), UsageRecord(day: "2026-09-20", appID: "test", appName: "Test", shortcut: "F12", count: 2), UsageRecord(day: "2026-09-20", appID: "test", appName: "Test", shortcut: "音量降低", count: 3)]
+check(Statistics.heatmapTotals(volumeRows)["F12"] == 6 && Statistics.heatmapTotals(volumeRows)["F11"] == 3, "音量事件合并到顶部音量键")
+check(Statistics.heatmapTotals(volumeRows)["音量增加"] == nil, "音量不重复显示在额外键位")
+check(Statistics.heatmapDetails(volumeRows, key: "F12").map(\.count) == [4, 2], "音量键明细保留操作与 F 键")
+check(Statistics.heatmapTotals(Statistics.heatmapRecords(volumeRows, modifier: "L⌘")).isEmpty, "修饰键筛选不混入无修饰音量事件")

@@ -227,10 +227,18 @@ Main keys use blue and modifiers use orange with independent scales. New records
 
 Main keys use blue and modifiers use orange, with independent color scales based on each group's maximum. The legend shows both maxima; equal colors across groups do not imply equal counts. Raw counts are unchanged.
 
-系统功能事件按名称独立排行，并在热力图下方列出；顶部 F1–F12 只累计实际 F 键事件，不根据音量或亮度反推物理键位。事件只通过一个被动监听入口处理，忽略抬键和系统重复；真实键盘、改键软件及系统版本的兼容性需实测。
+系统功能事件按名称独立排行；音量操作在热力图顶部对应音量键分组展示，其他系统功能列在下方。此分组不推断真实物理键位。事件只通过一个被动监听入口处理，忽略抬键和系统重复；真实键盘、改键软件及系统版本的兼容性需实测。
 
-System-function events have distinct ranking names and appear below the keyboard heatmap. Top-row F1–F12 counts represent actual F-key events; volume and brightness do not imply a physical key position. A single passive event tap handles delivery, ignoring releases and system repeats. Hardware, remapping tools and OS compatibility require real-device verification.
+System-function events retain distinct ranking names. Volume actions are grouped on the top-row volume keys; other system functions appear below the keyboard. This grouping does not establish physical key origin. A single passive event tap handles delivery, ignoring releases and system repeats. Hardware, remapping tools and OS compatibility require real-device verification.
 
 点击热力图中的左右修饰键可筛选主键用量，重复点击取消，点击另一修饰键切换。日期和应用范围继续生效，主键色阶与明细按筛选次数重新计算。包含额外修饰键的组合也计入。其他修饰键只作切换入口：已有聚合数据不能推算不同左右修饰键的共同使用次数。
 
 Click a sided modifier to filter main-key usage; click it again to clear or another modifier to switch. Date and app filters still apply. Main-key colors and details use the filtered counts, including shortcuts with additional modifiers. Other modifiers serve as filter controls only: existing aggregates cannot establish co-occurrence between modifier sides.
+
+音量增加/降低事件在热力图中分别与 F12/F11 合并展示，点击查看原始操作明细；排行榜和持久化数据不合并。这是参考键盘上的展示分组，不推断真实物理事件来源，修饰键筛选继续生效。
+
+Volume Up/Down events are grouped with F12/F11 in the heatmap, with original actions retained in click-through details. Rankings and stored records remain separate. This is a presentation grouping for the reference keyboard, not an inference about the physical source; modifier filtering still applies.
+
+热力图使用 Gamma＝2 的不透明度曲线：10% + 80% ×（次数 / 本组最高次数）²；零次键保持默认底色，主键和修饰键独立计算，图例采用相同曲线。
+
+The heatmap uses a gamma-2 opacity curve: 10% + 80% × (count / group maximum)². Zero-count keys keep their default background. Main keys and modifiers use separate scales, and legends follow the same curve.

@@ -95,3 +95,7 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 热力图主键为蓝色，修饰键为橙色，两组独立色阶。新记录根据每次事件的设备标志区分左右 ⌘、⌥、⌃、⇧；旧记录或缺少左右标志的输入仍在数据中保留未知计数，但热力图不显示未知项，也不推算两侧。两侧同时按住时各计一次参与，排行榜仍合并组合键。Fn、Caps Lock、锁定键不统计。可选 modifierCounts 字段保存每条聚合记录的左右及未知次数，旧数据兼容读取；CSV 仍导出合并后的组合键次数。
 
 Main keys use blue and modifiers use orange with independent scales. New records use each event's device flags to distinguish left/right Command, Option, Control and Shift. Legacy records and events without side flags retain unknown counts internally; the heatmap hides them and never assigns them to either side. Holding both sides counts one participation per side; shortcut rankings remain merged. Fn, Caps Lock and Lock remain untracked. The optional modifierCounts field stores sided and unknown aggregate counts and supports legacy data. CSV continues to export merged shortcut counts.
+
+音量增加/降低事件在热力图中分别与 F12/F11 合并展示，点击查看原始操作明细；排行榜和持久化数据不合并。这是参考键盘上的展示分组，不推断真实物理事件来源，修饰键筛选继续生效。
+
+Volume Up/Down events are grouped with F12/F11 in the heatmap, with original actions retained in click-through details. Rankings and stored records remain separate. This is a presentation grouping for the reference keyboard, not an inference about the physical source; modifier filtering still applies.

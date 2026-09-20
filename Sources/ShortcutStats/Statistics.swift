@@ -140,6 +140,22 @@ extension Statistics {
         }
     }
 
+    // Presentation grouping for the reference keyboard; not physical-key inference.
+    static let heatmapAliases = ["音量降低": "F11", "音量增加": "F12"]
+
+    static func heatmapTotals(_ records: [UsageRecord]) -> [String: Int] {
+        var result: [String: Int] = [:]
+        for (key, count) in keyTotals(records) {
+            result[heatmapAliases[key] ?? key, default: 0] += count
+        }
+        return result
+    }
+
+    static func heatmapDetails(_ records: [UsageRecord], key: String) -> [UsageRecord] {
+        let names = Set([key] + heatmapAliases.filter { $0.value == key }.map(\.key))
+        return records.filter { !keys(in: $0.shortcut).isDisjoint(with: names) }
+    }
+
     static func keyTotals(_ records: [UsageRecord]) -> [String: Int] {
         var totals: [String: Int] = [:]
         for record in records {

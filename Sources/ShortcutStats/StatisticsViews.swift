@@ -144,6 +144,8 @@ struct KeyboardHeatmap: View {
         }
     }
     private func keyTitle(_ key: String) -> String {
+        if key == "F11" { return "音量降低 / F11" }
+        if key == "F12" { return "音量增加 / F12" }
         guard Statistics.modifierKeys.contains(key) else { return key }
         let side = key.hasPrefix("L") ? "左" : key.hasPrefix("R") ? "右" : "左右未知"
         return "\(key.dropFirst())（\(side)）"
@@ -173,7 +175,7 @@ struct KeyboardHeatmap: View {
     }
     var body: some View {
         let filteredRecords = Statistics.heatmapRecords(records, modifier: selectedModifier)
-        let totals = Statistics.keyTotals(filteredRecords)
+        let totals = Statistics.heatmapTotals(filteredRecords)
         let modifiers = Statistics.modifierKeys
         let mainMaximum = totals.filter { !modifiers.contains($0.key) && !$0.key.hasPrefix("?") }.values.max() ?? 0
         let modifierMaximum = totals.filter { modifiers.contains($0.key) && !$0.key.hasPrefix("?") }.values.max() ?? 0
@@ -182,7 +184,7 @@ struct KeyboardHeatmap: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("快捷键热力图").font(.title3.bold())
-                Text("统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部图标对应 F1–F12；亮度、音量等系统事件按功能名称单独列在下方，不推算物理位置。Fn、Caps Lock 和锁定键不统计。")
+                Text("统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     if let modifier = selectedModifier {
@@ -210,7 +212,7 @@ struct KeyboardHeatmap: View {
                                 legend(key.label, scale: scale)
                                     .foregroundStyle(key.tracked ? Color.primary : Color.secondary)
                                     .frame(width: key.width * scale, height: key.height * scale)
-                                    .background(count > 0 && key.tracked ? keyColor.opacity(0.15 + 0.65 * Double(count) / Double(colorPeak)) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12 * scale))
+                                    .background(count > 0 && key.tracked ? keyColor.opacity(heatOpacity(Double(count) / Double(colorPeak))) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12 * scale))
                                     .overlay(RoundedRectangle(cornerRadius: 12 * scale).stroke((selectedKey == name || selectedModifier == name) && key.tracked ? keyColor : Color.secondary.opacity(0.25)))
                             }
                             .buttonStyle(.plain).disabled(!key.tracked)
@@ -227,7 +229,7 @@ struct KeyboardHeatmap: View {
                 }.font(.caption).foregroundStyle(.secondary)
                 if let key = selectedKey {
                     Text("\(keyTitle(key))：\(totals[key, default: 0]) 次").font(.headline)
-                    ForEach(Statistics.rankings(Statistics.records(filteredRecords, forKey: key), since: "", appID: "")) { item in
+                    ForEach(Statistics.rankings(Statistics.heatmapDetails(filteredRecords, key: key), since: "", appID: "")) { item in
                         HStack { Text(item.shortcut); Spacer(); Text("\(item.count) 次") }
                     }
                 }
@@ -241,10 +243,17 @@ struct KeyboardHeatmap: View {
             }.padding(.vertical, 8)
         }.frame(maxHeight: .infinity)
     }
+    private func heatOpacity(_ ratio: Double) -> Double {
+        let clamped = min(1, max(0, ratio))
+        return 0.10 + 0.80 * clamped * clamped
+    }
     private func colorLegend(_ title: String, color: Color, maximum: Int) -> some View {
         HStack {
             Text(title).frame(width: 48, alignment: .leading)
-            Rectangle().fill(LinearGradient(colors: [color.opacity(0.15), color.opacity(0.8)], startPoint: .leading, endPoint: .trailing))
+            Rectangle().fill(LinearGradient(stops: (0...40).map { step in
+                let position = Double(step) / 40
+                return Gradient.Stop(color: color.opacity(heatOpacity(position)), location: CGFloat(position))
+            }, startPoint: .leading, endPoint: .trailing))
                 .frame(width: 110, height: 10)
             Text("最高 \(maximum) 次")
         }
@@ -253,7 +262,7 @@ struct KeyboardHeatmap: View {
         Button { select(key) } label: {
             Text(label ?? key).font(.system(size: 12, design: .monospaced).bold())
                 .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-                .background((Statistics.modifierKeys.contains(key) ? Color.orange : Color.blue).opacity(count == 0 ? 0.05 : 0.15 + 0.65 * Double(count) / Double(peak)), in: RoundedRectangle(cornerRadius: 6))
+                .background((Statistics.modifierKeys.contains(key) ? Color.orange : Color.blue).opacity(count == 0 ? 0.05 : heatOpacity(Double(count) / Double(peak))), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke((selectedKey == key || selectedModifier == key) ? Color.blue : Color.secondary.opacity(0.3)))
         }.buttonStyle(.plain).help(keyHelp(key, count: count))
             .accessibilityLabel(keyHelp(key, count: count))
