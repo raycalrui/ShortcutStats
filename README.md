@@ -250,6 +250,28 @@ The heatmap uses a gamma-2 opacity curve: 10% + 80% × (count / group maximum)²
 
 ## 键鼠、应用时长与小时趋势 / Input, activity and hourly metrics
 
+### 完整备份与恢复 / Complete backup and restore
+
+主窗口底部「数据备份」可导出带版本号的 JSON，包含全部快捷键（含左右修饰键）、小时键鼠及活跃时长、中断记录，也包含尚未写盘的汇总，不受当前筛选影响。备份包含应用使用历史，请自行妥善保存。采集开关、隐藏列表、登录启动和系统权限不在备份内。
+
+Data Backup at the bottom of the dashboard exports versioned JSON containing all shortcuts (including modifier sides), hourly input/activity metrics and interruption history, including pending aggregates regardless of filters. Backups contain application usage history; store them appropriately. Collection preferences, hidden items, login settings and system permissions are excluded.
+
+恢复前检查格式、版本、重复记录与数值，显示确认后替换全部统计，不相加。恢复前旧数据自动保存在 `~/Library/Application Support/ShortcutStats/Backups/`。失败会尝试回滚；意外退出时下次启动先处理恢复日志。完成后保持暂停，确认数据后手动开始。当前单个备份最大 256 MB；请勿同时运行多个应用副本。
+
+Restore validates the format, version, duplicate records and values before confirmation, then replaces rather than adds to existing statistics. A pre-restore backup is saved in `~/Library/Application Support/ShortcutStats/Backups/`. Failures trigger rollback; interrupted restores are recovered at the next launch before collection. Restore leaves collection paused until you resume it. Each backup is limited to 256 MB; do not run multiple app copies simultaneously.
+
+顶部左右箭头用于逐日查看：从今天向左依次查看昨天、前天，也可选择「按天查看」并直接选择日期；右箭头最多到今天，「回到今天」恢复今日范围。所有统计页面及 CSV 继续使用同一个日期和应用筛选。多日范围下左箭头从结束日向前一天开始。
+
+Use the top arrows to browse individual days, or choose the daily mode and pick a date. Forward navigation stops at today; Return to Today restores today's range. All statistics pages and CSV exports share the date/app filters. From a multi-day range, the left arrow starts one day before its end date.
+
+点击菜单栏图标可查看今日全部应用的快捷键、主键、鼠标点击和活跃时长，并暂停／开始统计或打开主窗口。该摘要独立于主窗口日期和应用筛选，未开启采集的指标会明确标注。
+
+Click the menu-bar icon for today's all-app shortcut, main-key, mouse-click and active-time summary, with Pause/Start and Open Dashboard controls. This summary is independent of the dashboard filters and labels disabled collection explicitly.
+
+「导出 CSV」新增应用活跃时长、键鼠每日统计、每小时统计三种格式。时长单位为秒，应用占比为百分数；键鼠保留各指标单位，小时记录同时保留 UTC 时间和采集时本地日期，不把旧每日快捷键推算为小时数据。CSV 不是完整备份。
+
+Export CSV also offers app active time, daily keyboard/mouse metrics and hourly metrics. Durations use seconds and app shares use percentages; input metrics retain their distinct units. Hourly exports preserve UTC timestamps and the captured local date, without inferring hours from legacy daily shortcuts. CSV is not a complete backup.
+
 「统计总览」为默认页面，按顶部日期与应用范围展示全部主键次数、快捷键次数、鼠标点击总数、活跃时长和活跃时长最高的应用。快捷键仍使用完整的每日历史，不与全部主键相加；其他指标仅包含开启采集后的记录。未开启的指标会明确提示，关闭采集不隐藏已有历史。
 
 Overview is the default page. It shows main-key presses, shortcut uses, mouse clicks, active time and the most-used app by active time within the selected date/app range. Shortcut totals retain daily history and are not added to main-key totals. Other metrics only contain data collected after enabling them. Disabled collection is clearly labeled without hiding history.

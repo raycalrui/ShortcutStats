@@ -108,3 +108,6 @@ Volume Up/Down events are grouped with F12/F11 in the heatmap, with original act
 - 移动为事件单位，连续滚动为点、离散滚动为行，所有轴的绝对增量分别累计。不能宣称真实距离或打字字符数。
 - 独立检查包含 InputMetricsChecks、ActiveTimeChecks 与 SQLite 隔离临时库测试；真实设备、锁屏、睡眠及高频鼠标功耗仍需实机验收。
 - 默认统计总览、应用时长排行榜、热力图双模式共用顶部日期/应用筛选。`ActivitySummary` 负责展示汇总：快捷键取每日记录，不能与小时 shortcut 或全部主键相加；应用按 appID 合并，占比使用筛选后总活跃时长。全部主键热力图从 key: 指标转换，按完整物理键名统计，不解析成快捷键或合并媒体事件。关闭采集保留历史并明确提示。
+- `DayNavigation` 按日历日翻页（不能按86400秒推算），右箭头不得进入未来；`QuickStatsView` 永远使用今日全部应用，独立于主窗口筛选。
+- 扩展CSV由 `ActivityCSV` 编码，保留单位、UTC小时和采集日期、BOM与公式防护；读取错误必须报错，不导出伪空数据。
+- `BackupCodec`/`BackupRestore` 提供版本化完整统计备份（含pending，不含设置和权限）；恢复须确认、预先保存旧备份、采用替换非累加，并保持暂停。跨SQLite/JSON使用恢复日志，启动恢复完成前不得采集。新增检查只用临时合成数据，禁止用真实用户数据做恢复测试。

@@ -1,6 +1,8 @@
 import Foundation
 import CoreGraphics
 
+// Day navigation follows calendar days, including DST and year boundaries.
+
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     guard condition() else { fatalError(message) }
     print("PASS: \(message)")
@@ -220,3 +222,14 @@ check(ordinaryRecords.map(\.shortcut) == ["A", "Space"] && ordinaryRecords.reduc
 check(Statistics.keyTotals(ordinaryRecords) == ["A": 8, "Space": 2], "全部主键热力图不虚构修饰键参与次数")
 let rangeOverviewRows = try metricStore.rows(from: "2026-09-20", through: "2026-09-20", appID: "a")
 check(ActivitySummary(rows: rangeOverviewRows, records: []).activeSeconds == 1, "总览沿用存储日期筛选，不跨日混入活跃时长")
+
+let newYear = metricCalendar.date(from: DateComponents(year: 2026, month: 1, day: 1, hour: 12))!
+check(Statistics.dayString(DayNavigation.moved(newYear, by: -1, now: newYear, calendar: metricCalendar), calendar: metricCalendar) == "2025-12-31", "前一天支持跨年")
+check(!DayNavigation.canMoveForward(newYear, now: newYear, calendar: metricCalendar), "今天禁用向未来翻页")
+check(DayNavigation.moved(newYear, by: 1, now: newYear, calendar: metricCalendar) == metricCalendar.startOfDay(for: newYear), "日期翻页不能超过今天")
+let dstNext = iso.date(from: "2026-11-02T08:00:00Z")!
+let dstPrevious = DayNavigation.moved(dstNext, by: -1, now: dstNext, calendar: dstCalendar)
+check(dstNext.timeIntervalSince(dstPrevious) == 25 * 3600 && Statistics.dayString(dstPrevious, calendar: dstCalendar) == "2026-11-01", "夏令时按日历减一天而非固定24小时")
+check(DayNavigation.canMoveForward(dstPrevious, now: dstNext, calendar: dstCalendar), "历史日期允许下一天")
+runActivityExportChecks()
+runBackupChecks()

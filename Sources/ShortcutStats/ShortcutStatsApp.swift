@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = Monitor()
     private var statusSubscription: AnyCancellable?
     private var loginLaunch = false
+    private let quickPopover = NSPopover()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let event = NSAppleEventManager.shared().currentAppleEvent
@@ -30,7 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "ShortcutStats")
         item.button?.target = self
-        item.button?.action = #selector(showWindow)
+        item.button?.action = #selector(toggleQuickStats)
+        quickPopover.behavior = .transient
+        quickPopover.contentSize = NSSize(width: 320, height: 470)
+        quickPopover.contentViewController = NSHostingController(rootView: QuickStatsView(monitor: monitor) { [weak self] in
+            self?.showWindow()
+        })
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 920),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = Bundle.main.bundleIdentifier == "cc.raycal.ShortcutStats.local"
@@ -49,8 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showWindow() {
+        quickPopover.performClose(nil)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+    @objc private func toggleQuickStats() {
+        guard let button = item.button else { return }
+        if quickPopover.isShown { quickPopover.performClose(nil) }
+        else { quickPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY) }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showWindow()
@@ -67,6 +79,7 @@ struct Dashboard: View {
 
     @State private var startDate = Calendar.current.date(byAdding: .day, value: -6, to: Date())!
     @State private var endDate = Date()
+    @State private var selectedDay = Date()
     @State private var search = ""
     @State private var section = "统计总览"
     @State private var showHidden = false
@@ -78,11 +91,17 @@ struct Dashboard: View {
         if let data = try? JSONEncoder().encode(value.sorted()), let text = String(data: data, encoding: .utf8) { hiddenJSON = text }
     }
     private var since: String {
+        if days == -2 { return Statistics.dayString(selectedDay) }
         if days == -1 { return Statistics.dayString(startDate) }
         if days == 0 { return (monitor.records.map(\.day) + monitor.activityRows(from: "", through: "9999", appID: "").map(\.day)).min() ?? Statistics.dayString(Date()) }
         return Statistics.dayString(Calendar.current.date(byAdding: .day, value: -(days - 1), to: Date())!)
     }
-    private var through: String { Statistics.dayString(days == -1 ? endDate : Date()) }
+    private var through: String { Statistics.dayString(days == -2 ? selectedDay : days == -1 ? endDate : Date()) }
+    private var dayAnchor: Date { days == -2 ? selectedDay : days == -1 ? endDate : Date() }
+    private func moveDay(_ direction: Int) {
+        selectedDay = DayNavigation.moved(dayAnchor, by: direction)
+        monitor.days = -2
+    }
     private var invalidRange: Bool { since > through }
     private var selectedRecords: [UsageRecord] {
         Statistics.filtered(monitor.records, from: since, through: through, appID: appID)
@@ -117,6 +136,7 @@ struct Dashboard: View {
             HStack {
                 Picker("时间", selection: $monitor.days) {
                     Text("今天").tag(1)
+                    Text("按天查看").tag(-2)
                     Text("近 7 天").tag(7)
                     Text("近 30 天").tag(30)
                     Text("全部").tag(0)
@@ -130,7 +150,29 @@ struct Dashboard: View {
                 Menu("导出 CSV") {
                     Button("日期与应用范围（全部组合键）") { monitor.export(since: since, through: through, appID: appID) }
                     Button("当前排行榜（含搜索与隐藏过滤）") { monitor.export(since: since, through: through, appID: appID, search: search, hidden: hidden) }
+                    Divider()
+                    ForEach(ActivityCSVKind.allCases, id: \.self) { kind in
+                        Button(kind.title) { monitor.exportActivityCSV(kind: kind, from: since, through: through, appID: appID) }
+                    }
                 }.disabled(invalidRange)
+            }
+            HStack(spacing: 12) {
+                Button { moveDay(-1) } label: { Image(systemName: "chevron.left") }
+                    .help("查看前一天").accessibilityLabel("查看前一天")
+                if days == -2 {
+                    DatePicker("日期", selection: $selectedDay, in: ...Date(), displayedComponents: .date)
+                        .labelsHidden().fixedSize()
+                } else {
+                    Text(days == 1 ? "今天" : "按天浏览").foregroundStyle(.secondary)
+                }
+                Button { moveDay(1) } label: { Image(systemName: "chevron.right") }
+                    .disabled(!DayNavigation.canMoveForward(dayAnchor))
+                    .help("查看后一天").accessibilityLabel("查看后一天")
+                Button("回到今天") { selectedDay = Date(); monitor.days = 1 }
+                if days != -2 && days != 1 {
+                    Text("左箭头从当前范围的结束日向前查看").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
             }
             if days == -1 {
                 HStack {
@@ -184,6 +226,10 @@ struct Dashboard: View {
                 Text("统计含 ⌘ / ⌥ / ⌃ 的组合键、单独 F 键及可识别的媒体/亮度键；忽略长按重复。\n按前台应用归类；键位按美式 QWERTY 标记。数据仅保存在本机。")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
+                Menu("数据备份") {
+                    Button("导出完整备份…") { monitor.exportBackup() }
+                    Button("从备份恢复…") { monitor.importBackup() }
+                }
                 Spacer()
                 Button("检查更新…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)

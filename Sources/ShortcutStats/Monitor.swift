@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import UniformTypeIdentifiers
 
 final class Monitor: ObservableObject {
     @Published var activityRevision = 0
@@ -23,6 +24,10 @@ final class Monitor: ObservableObject {
             if activityError != message { DispatchQueue.main.async { [weak self] in self?.activityError = message } }
             return []
         }
+    }
+    func activityRowsForExport(from: String, through: String, appID: String) throws -> [HourMetric] {
+        guard let activityStore else { throw BackupCodec.invalid("扩展统计数据库不可用") }
+        return try activityStore.rows(from: from, through: through, appID: appID)
     }
     private func sampleActivity() {
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~UInt32(0))!)
@@ -91,8 +96,16 @@ final class Monitor: ObservableObject {
         } else { sessionInactive = true }
         file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ShortcutStats/statistics.json")
-        do { activityStore = try ActivityStore(url: file.deletingLastPathComponent().appendingPathComponent("activity.sqlite")) }
-        catch { activityError = "扩展统计数据库不可用，停止新增扩展统计：\(error.localizedDescription)" }
+        do {
+            let store = try ActivityStore(url: file.deletingLastPathComponent().appendingPathComponent("activity.sqlite"))
+            try BackupRestore(directory: file.deletingLastPathComponent()).recoverIfNeeded(store: store)
+            activityStore = store
+        }
+        catch {
+            activityError = "扩展统计数据库或恢复日志不可用：\(error.localizedDescription)"
+            loadFailed = true
+            historyReadable = false
+        }
         do {
             if FileManager.default.fileExists(atPath: file.path) {
                 let loaded = try JSONDecoder().decode([UsageRecord].self, from: Data(contentsOf: file))
@@ -380,6 +393,77 @@ final class Monitor: ObservableObject {
             let selected = Statistics.filtered(records, from: since, through: through, appID: appID, search: search, hidden: hidden)
             try Statistics.csv(selected).write(to: url, atomically: true, encoding: .utf8)
         } catch { errorMessage = "导出失败：\(error.localizedDescription)" }
+    }
+
+    private func backupSnapshot() throws -> StatisticsBackup {
+        guard !loadFailed, historyReadable, let activityStore else { throw BackupCodec.invalid("数据读取异常，无法创建完整备份；请先解决读取错误") }
+        return StatisticsBackup(records: Array(counts.values), hours: try activityStore.snapshot(), interruptions: gapHistory.entries)
+    }
+
+    func exportBackup() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "ShortcutStats-Backup-\(formatter.string(from: Date())).json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            sampleActivity()
+            try BackupCodec.encode(backupSnapshot()).write(to: url, options: .atomic)
+        } catch { errorMessage = "备份失败：\(error.localizedDescription)" }
+    }
+
+    func importBackup() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= 256 * 1024 * 1024 else { throw BackupCodec.invalid("备份超过 256 MB 限制") }
+            let incoming = try BackupCodec.decode(Data(contentsOf: url))
+            // Check current stores before offering a destructive replacement.
+            _ = try backupSnapshot()
+            let alert = NSAlert()
+            alert.messageText = "用备份替换全部统计数据？"
+            alert.informativeText = "包含 \(incoming.records.count) 条快捷键记录、\(incoming.hours.count) 条小时指标、\(incoming.interruptions.count) 条中断记录。恢复会替换现有数据，不会合并。开始前自动保存完整旧数据到本机 Backups 文件夹；完成后保持暂停。采集开关、隐藏列表及其他设置不变。"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "取消")
+            alert.addButton(withTitle: "备份当前数据并替换")
+            guard alert.runModal() == .alertSecondButtonReturn else { return }
+            stop()
+            let original = try backupSnapshot()
+            guard let activityStore else { throw BackupCodec.invalid("扩展统计数据库不可用") }
+            let restore = BackupRestore(directory: file.deletingLastPathComponent())
+            do {
+                let safety = try restore.restore(incoming, original: original, store: activityStore)
+                counts = Dictionary(uniqueKeysWithValues: incoming.records.map { (key($0), $0) })
+                records = incoming.records
+                gapHistory = GapHistory()
+                gapHistory.entries = incoming.interruptions
+                interruptions = incoming.interruptions
+                dirty = false
+                historyDirty = false
+                stateInitialized = false
+                reconcile()
+                activityError = nil
+                historyError = nil
+                activityRevision &+= 1
+                let done = NSAlert()
+                done.messageText = "恢复完成，统计已暂停"
+                done.informativeText = "确认数据后可点击“开始统计”。恢复前备份：\(safety.path)"
+                done.addButton(withTitle: "好")
+                done.runModal()
+            } catch {
+                if FileManager.default.fileExists(atPath: restore.journal.path) {
+                    // A failed rollback must never be overwritten by timer or quit saves.
+                    loadFailed = true
+                    historyReadable = false
+                    self.activityStore = nil
+                    reconcile()
+                }
+                throw error
+            }
+        } catch { errorMessage = "恢复失败：\(error.localizedDescription)" }
     }
 
     static let keyNames: [Int64: String] = [
