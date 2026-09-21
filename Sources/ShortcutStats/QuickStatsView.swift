@@ -23,11 +23,16 @@ struct QuickStatsView: View {
                 records: monitor.records.filter { $0.day == day }
             )
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("今日统计").font(.headline)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("今日统计").font(.headline)
+                            Text("全部应用")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                         Spacer()
-                        Text(context.date.formatted(.dateTime.month().day()))
+                        Text(chineseDate(context.date))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Label(monitor.status, systemImage: monitor.health.symbol)
@@ -44,18 +49,22 @@ struct QuickStatsView: View {
                         let upload = rows(data: activityRows, metric: "network.upload.bytes")
                         metric("网络流量", value: "↓ \(bytes(download))  ↑ \(bytes(upload))", symbol: "network", enabled: network)
                     }
-                    if showActive { VStack(alignment: .leading, spacing: 5) {
-                        Text("最常用 App · 按活跃时长").font(.caption).foregroundStyle(.secondary)
-                        Text(data.appRankings.first?.name ?? "暂无数据")
-                            .font(.headline).lineLimit(2)
+                    if showActive { VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("最常用 App")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 8)
+                            Text(data.appRankings.first?.name ?? "暂无数据")
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                        }
                         if let app = data.appRankings.first {
-                            Text("\(duration(app.seconds)) · \(app.share.formatted(.percent.precision(.fractionLength(1))))")
+                            Text("按活跃时长 · \(duration(app.seconds)) · \(app.share.formatted(.percent.precision(.fractionLength(1))))")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         if !active { disabledLabel }
                     } }
-                    Text("全部应用 · 主键与快捷键有重叠，不相加。")
-                        .font(.caption2).foregroundStyle(.secondary)
                     if let error = monitor.activityError {
                         Text(error).font(.caption).foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
@@ -66,6 +75,11 @@ struct QuickStatsView: View {
                             if monitor.wantsTracking { monitor.stop() } else { monitor.start() }
                         }
                         Spacer()
+                        SettingsLink {
+                            Image(systemName: "gearshape")
+                        }
+                        .help("打开设置")
+                        .accessibilityLabel("设置")
                         Button("打开主窗口", action: openDashboard)
                             .buttonStyle(.borderedProminent)
                     }
@@ -73,7 +87,7 @@ struct QuickStatsView: View {
                 .padding(16)
             }
         }
-        .frame(width: 320, height: 470)
+        .frame(width: 320, height: 340)
     }
 
     private func metric(_ title: String, value: String, symbol: String, enabled: Bool? = nil) -> some View {
@@ -99,6 +113,10 @@ struct QuickStatsView: View {
     }
     private func bytes(_ value: Double) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
+    }
+
+    private func chineseDate(_ date: Date) -> String {
+        date.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).month().day())
     }
 
     private func duration(_ seconds: Double) -> String {

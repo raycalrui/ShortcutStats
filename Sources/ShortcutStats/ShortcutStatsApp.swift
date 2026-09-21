@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.target = self
         item.button?.action = #selector(toggleQuickStats)
         quickPopover.behavior = .transient
-        quickPopover.contentSize = NSSize(width: 320, height: 470)
+        quickPopover.contentSize = NSSize(width: 320, height: 340)
         quickPopover.contentViewController = NSHostingController(rootView: QuickStatsView(monitor: monitor) { [weak self] in
             self?.showWindow()
         })
@@ -95,7 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleQuickStats() {
         guard let button = item.button else { return }
         if quickPopover.isShown { quickPopover.performClose(nil) }
-        else { quickPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY) }
+        else {
+            NSApp.activate(ignoringOtherApps: true)
+            quickPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showWindow()
