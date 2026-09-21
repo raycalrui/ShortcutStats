@@ -6,8 +6,12 @@ import UniformTypeIdentifiers
 final class Monitor: ObservableObject {
     @Published var activityRevision = 0
     @Published var activityError: String?
+    @Published private(set) var dataReport: DataManagementReport?
+    @Published private(set) var retentionDays = DataRetention.validated(UserDefaults.standard.integer(forKey: DataManagement.retentionDefaultsKey)).rawValue
+    @Published private(set) var dataManagementNotice: String?
     private var activityStore: ActivityStore?
     private let activeTracker = ActiveTimeTracker()
+    private let networkTracker = NetworkTracker()
     private var sessionInactive = false
     private var screenLocked = false
     private var screenSleeping = false
@@ -17,6 +21,7 @@ final class Monitor: ObservableObject {
     private(set) var keyboardMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.keyboard")
     private(set) var mouseMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.mouse")
     private(set) var activeMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.active")
+    private(set) var networkMetricsEnabled = UserDefaults.standard.bool(forKey: "metrics.network")
     func activityRows(from: String, through: String, appID: String) -> [HourMetric] {
         do { return try activityStore?.rows(from: from, through: through, appID: appID) ?? [] }
         catch {
@@ -130,6 +135,7 @@ final class Monitor: ObservableObject {
             lockObservers.append(distributed.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] _ in
                 self?.screenLocked = locked
                 self?.activeTracker.reset()
+                self?.networkTracker.reset()
             })
         }
         preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -137,11 +143,14 @@ final class Monitor: ObservableObject {
             let mouse = UserDefaults.standard.bool(forKey: "metrics.mouse")
             let keyboard = UserDefaults.standard.bool(forKey: "metrics.keyboard")
             let active = UserDefaults.standard.bool(forKey: "metrics.active")
+            let network = UserDefaults.standard.bool(forKey: "metrics.network")
             if self.activeMetricsEnabled != active { self.activeTracker.reset() }
+            if self.networkMetricsEnabled != network { self.networkTracker.reset() }
             let rebuild = self.mouseMetricsEnabled != mouse
             self.keyboardMetricsEnabled = keyboard
             self.mouseMetricsEnabled = mouse
             self.activeMetricsEnabled = active
+            self.networkMetricsEnabled = network
             if rebuild { self.tearDownTap(); self.lastAttempt = .distantPast; self.reconcile() }
         }
         let center = NSWorkspace.shared.notificationCenter
@@ -149,17 +158,20 @@ final class Monitor: ObservableObject {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 self?.screenSleeping = off
                 self?.activeTracker.reset()
+                self?.networkTracker.reset()
             })
         }
         for (name, inactive) in [(NSWorkspace.sessionDidResignActiveNotification, true), (NSWorkspace.sessionDidBecomeActiveNotification, false)] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 self?.sessionInactive = inactive
                 self?.activeTracker.reset()
+                self?.networkTracker.reset()
             })
         }
         workspaceObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.activeTracker.reset()
+            self.networkTracker.reset()
             self.flushActivity()
             self.sleeping = true
             self.reconcile()
@@ -169,6 +181,7 @@ final class Monitor: ObservableObject {
         workspaceObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             self.sleeping = false
+            self.networkTracker.reset()
             self.lastAttempt = .distantPast
             self.updateForeground()
             self.reconcile()
@@ -180,6 +193,7 @@ final class Monitor: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.sampleActivity()
+            self.sampleNetwork()
             self.activityRevision &+= 1
             if Date().timeIntervalSince(self.metricsSave) >= 15 {
                 self.flushActivity()
@@ -189,6 +203,15 @@ final class Monitor: ObservableObject {
             if Date().timeIntervalSince(self.lastSave) >= 15 { self.save() }
             self.reconcile()
             if self.historyDirty { self.saveHistory() }
+            self.runAutomaticRetentionIfNeeded()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runAutomaticRetentionIfNeeded() }
+    }
+
+    private func sampleNetwork() {
+        let eligible = wantsTracking && !sleeping && !sessionInactive && !screenLocked && !screenSleeping
+        for delta in networkTracker.sample(enabled: networkMetricsEnabled, eligible: eligible) {
+            activityStore?.add(delta, at: Date(), appID: NetworkTracker.systemAppID, appName: "整台 Mac")
         }
     }
 
@@ -296,7 +319,9 @@ final class Monitor: ObservableObject {
 
     func stop(persistPause: Bool = true) {
         sampleActivity()
+        sampleNetwork()
         activeTracker.reset()
+        networkTracker.reset()
         flushActivity()
         if persistPause {
             wantsTracking = false
@@ -398,6 +423,164 @@ final class Monitor: ObservableObject {
     private func backupSnapshot() throws -> StatisticsBackup {
         guard !loadFailed, historyReadable, let activityStore else { throw BackupCodec.invalid("数据读取异常，无法创建完整备份；请先解决读取错误") }
         return StatisticsBackup(records: Array(counts.values), hours: try activityStore.snapshot(), interruptions: gapHistory.entries)
+    }
+
+    func refreshDataManagement() {
+        do {
+            sampleActivity()
+            try activityStore?.flush()
+            dataReport = DataManagement.report(directory: file.deletingLastPathComponent(), backup: try backupSnapshot())
+        } catch {
+            errorMessage = "读取数据概况失败：\(error.localizedDescription)"
+        }
+    }
+
+    func deleteData(from start: Date, through end: Date) {
+        let from = formatter.string(from: start)
+        let through = formatter.string(from: end)
+        guard from <= through else {
+            errorMessage = "删除失败：起始日期不能晚于结束日期"
+            return
+        }
+        requestRemoval(.dateRange(from: from, through: through),
+                       title: "删除 \(from) 至 \(through) 的全部统计？",
+                       detail: "将删除范围内的快捷键、键鼠、应用时长、网络流量，以及与该范围有交集的中断记录。")
+    }
+
+    func clearShortcutData() {
+        requestRemoval(.shortcuts, title: "清空全部快捷键统计？",
+                       detail: "扩展小时数据、中断记录和设置会保留。")
+    }
+
+    func clearHourlyData() {
+        requestRemoval(.hourly, title: "清空全部扩展小时数据？",
+                       detail: "将清空普通按键、鼠标、应用活跃时长和网络流量等小时汇总；快捷键和中断记录会保留。")
+    }
+
+    func configureRetention(days requestedDays: Int) {
+        let requested = DataRetention.validated(requestedDays)
+        guard requested.rawValue != retentionDays else { return }
+        guard requested != .forever else {
+            retentionDays = requested.rawValue
+            UserDefaults.standard.set(requested.rawValue, forKey: DataManagement.retentionDefaultsKey)
+            dataManagementNotice = "已改为永久保留统计数据。"
+            return
+        }
+        do {
+            let snapshot = try backupSnapshot()
+            guard let replacement = try DataManagement.retentionReplacement(days: requested.rawValue, backup: snapshot) else {
+                retentionDays = requested.rawValue
+                UserDefaults.standard.set(requested.rawValue, forKey: DataManagement.retentionDefaultsKey)
+                dataManagementNotice = "已设置为保留最近 \(requested.rawValue) 天；当前没有过期数据。"
+                refreshDataManagement()
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = "启用 \(requested.title)？"
+            alert.informativeText = "现有过期数据将立即删除，以后每天最多检查一次。每次实际删除前都会再次确认并先创建完整安全备份；取消不会改变当前保留期限。"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "取消")
+            alert.addButton(withTitle: "备份并删除过期数据")
+            guard alert.runModal() == .alertSecondButtonReturn else { return }
+            stop()
+            let original = try backupSnapshot()
+            let latest = try DataManagement.retentionReplacement(days: requested.rawValue, backup: original) ?? replacement
+            let safety = try replaceManagedData(with: latest, original: original)
+            retentionDays = requested.rawValue
+            UserDefaults.standard.set(requested.rawValue, forKey: DataManagement.retentionDefaultsKey)
+            UserDefaults.standard.set(Date(), forKey: DataManagement.retentionLastCheckDefaultsKey)
+            dataManagementNotice = "已删除过期数据并保持暂停。安全备份：\(safety.path)"
+            refreshDataManagement()
+        } catch {
+            errorMessage = "设置保留期限失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func requestRemoval(_ kind: DataRemovalKind, title: String, detail: String) {
+        do {
+            let before = try backupSnapshot()
+            let preview = try DataManagement.removing(kind, from: before)
+            guard managedDataChanged(before, preview) else {
+                dataManagementNotice = "没有符合条件的数据需要删除。"
+                refreshDataManagement()
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = detail + " 删除前会把全部现有统计保存到 Backups；失败时自动回滚。完成后统计保持暂停，设置不会删除。"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "取消")
+            alert.addButton(withTitle: "备份并删除")
+            guard alert.runModal() == .alertSecondButtonReturn else { return }
+            stop()
+            let original = try backupSnapshot()
+            let replacement = try DataManagement.removing(kind, from: original)
+            let safety = try replaceManagedData(with: replacement, original: original)
+            dataManagementNotice = "删除完成，统计已暂停。安全备份：\(safety.path)"
+            refreshDataManagement()
+        } catch {
+            errorMessage = "删除失败，原数据已保留：\(error.localizedDescription)"
+        }
+    }
+
+    private func replaceManagedData(with replacement: StatisticsBackup, original: StatisticsBackup) throws -> URL {
+        guard let activityStore else { throw BackupCodec.invalid("扩展统计数据库不可用") }
+        let restore = BackupRestore(directory: file.deletingLastPathComponent())
+        do {
+            let safety = try restore.restore(replacement, original: original, store: activityStore)
+            counts = Dictionary(uniqueKeysWithValues: replacement.records.map { (key($0), $0) })
+            records = replacement.records
+            gapHistory = GapHistory()
+            gapHistory.entries = replacement.interruptions
+            interruptions = replacement.interruptions
+            dirty = false
+            historyDirty = false
+            stateInitialized = false
+            reconcile()
+            activityError = nil
+            historyError = nil
+            activityRevision &+= 1
+            return safety
+        } catch {
+            if FileManager.default.fileExists(atPath: restore.journal.path) {
+                loadFailed = true
+                historyReadable = false
+                self.activityStore = nil
+                reconcile()
+            }
+            throw error
+        }
+    }
+
+    private func managedDataChanged(_ old: StatisticsBackup, _ new: StatisticsBackup) -> Bool {
+        old.records.count != new.records.count || old.hours.count != new.hours.count || old.interruptions.count != new.interruptions.count
+    }
+
+    private func runAutomaticRetentionIfNeeded() {
+        guard retentionDays > 0 else { return }
+        let defaults = UserDefaults.standard
+        if let last = defaults.object(forKey: DataManagement.retentionLastCheckDefaultsKey) as? Date,
+           Date().timeIntervalSince(last) < 86_400 { return }
+        defaults.set(Date(), forKey: DataManagement.retentionLastCheckDefaultsKey)
+        do {
+            let before = try backupSnapshot()
+            guard let preview = try DataManagement.retentionReplacement(days: retentionDays, backup: before) else { return }
+            let alert = NSAlert()
+            alert.messageText = "发现超过保留期限的数据"
+            alert.informativeText = "将按“保留最近 \(retentionDays) 天”删除过期统计。删除前会创建完整安全备份；取消后本次不删除，下次每日检查时再询问。"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "本次取消")
+            alert.addButton(withTitle: "备份并删除")
+            guard alert.runModal() == .alertSecondButtonReturn else { return }
+            stop()
+            let original = try backupSnapshot()
+            let replacement = try DataManagement.retentionReplacement(days: retentionDays, backup: original) ?? preview
+            let safety = try replaceManagedData(with: replacement, original: original)
+            dataManagementNotice = "已自动清理过期数据并保持暂停。安全备份：\(safety.path)"
+            refreshDataManagement()
+        } catch {
+            errorMessage = "自动清理失败，原数据已保留：\(error.localizedDescription)"
+        }
     }
 
     func exportBackup() {

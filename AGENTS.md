@@ -18,6 +18,14 @@
 | `Sources/ShortcutStats/TrackingHealth.swift` | 状态判定、暂停优先级和中断记录模型 |
 | `Sources/ShortcutStats/StatisticsViews.swift` | 排行榜组件、每日趋势及快捷键热力图 |
 | `Sources/ShortcutStats/Statistics.swift` | 排名汇总、筛选和 CSV 编码 |
+| `Sources/ShortcutStats/ActivityViews.swift` | 统计总览、应用时长排行与应用详情 |
+| `Sources/ShortcutStats/CalendarHeatmapData.swift` | 日历热力图的纯数据汇总与日期网格 |
+| `Sources/ShortcutStats/CalendarHeatmapView.swift` | 最近约 12 个月的日历热力图界面 |
+| `Sources/ShortcutStats/DataManagement.swift` | 数据概况、保留期限及删除转换 |
+| `Sources/ShortcutStats/DataManagementView.swift` | 数据管理界面与确认入口 |
+| `Sources/ShortcutStats/NetworkMetrics.swift` | 整机网络接口计数器与增量计算 |
+| `Sources/ShortcutStats/NetworkUsageView.swift` | 网络流量卡片和小时趋势 |
+| `Sources/ShortcutStats/MenuBarPreferences.swift` | 菜单栏指标与快捷摘要偏好 |
 | `Configuration/Info.plist` | App 元数据与菜单栏应用配置 |
 | `ShortcutStats.xcodeproj` | App target、构建配置和共享 Scheme |
 | `Tests/main.swift` | 独立逻辑检查程序，不是 XCTest target |
@@ -111,3 +119,8 @@ Volume Up/Down events are grouped with F12/F11 in the heatmap, with original act
 - `DayNavigation` 按日历日翻页（不能按86400秒推算），右箭头不得进入未来；`QuickStatsView` 永远使用今日全部应用，独立于主窗口筛选。
 - 扩展CSV由 `ActivityCSV` 编码，保留单位、UTC小时和采集日期、BOM与公式防护；读取错误必须报错，不导出伪空数据。
 - `BackupCodec`/`BackupRestore` 提供版本化完整统计备份（含pending，不含设置和权限）；恢复须确认、预先保存旧备份、采用替换非累加，并保持暂停。跨SQLite/JSON使用恢复日志，启动恢复完成前不得采集。新增检查只用临时合成数据，禁止用真实用户数据做恢复测试。
+- 应用图标只按 Bundle ID 从本机安装位置读取并做内存缓存；不得把图标路径或图像写入统计。应用详情必须再次按 appID 过滤，不能用同名应用合并。
+- 日历热力图只汇总真实已有数据，快捷键从每日记录取值，不能与小时 shortcut 标记重复相加；主键、鼠标、时长和网络各自按既有指标计算。日期点击沿用主窗口单日筛选。
+- 网络流量只记录整机活动接口的收发字节增量，不保存 IP、域名、端口、内容或按 App 归因。开关变化、暂停、睡眠、锁屏和会话切换须重置基线，禁止把中断期间流量补算；VPN/虚拟接口重复计数是已知边界。
+- 数据删除与有限保留期限必须先预览、再次确认、创建完整安全备份，并通过恢复日志支持回滚；完成后保持暂停。检查只使用临时合成数据，不操作用户真实统计。
+- 菜单栏数字和快捷摘要始终使用今日、全部应用数据，独立于主窗口筛选；网络指标保持整机口径。

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private let monitor = Monitor()
     private var statusSubscription: AnyCancellable?
+    private var preferencesSubscription: AnyCancellable?
     private var loginLaunch = false
     private let quickPopover = NSPopover()
 
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MenuBarDefaults.register()
         NSApp.setActivationPolicy(.accessory)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "ShortcutStats")
@@ -45,13 +47,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.minSize = NSSize(width: 820, height: 820)
         window.contentView = NSHostingView(rootView: Dashboard(monitor: monitor))
         window.center()
-        statusSubscription = monitor.$health.sink { [weak self] state in
-            self?.item.button?.toolTip = "ShortcutStats · " + state.title
-            self?.item.button?.image = NSImage(systemSymbolName: state.symbol, accessibilityDescription: state.title)
+        statusSubscription = Publishers.CombineLatest(monitor.$health, monitor.$activityRevision).sink { [weak self] state, _ in
+            DispatchQueue.main.async { self?.updateStatusItem(state: state) }
         }
+        preferencesSubscription = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.updateStatusItem(state: self?.monitor.health) } }
         _ = UpdateController.shared
         monitor.restoreTracking()
         if !loginLaunch { showWindow() }
+    }
+    private func updateStatusItem(state: TrackingState?) {
+        guard let state, let button = item.button else { return }
+        let day = Statistics.dayString(Date())
+        let rows = monitor.activityRows(from: day, through: day, appID: "")
+        let summary = ActivitySummary(rows: rows, records: monitor.records.filter { $0.day == day })
+        let mode = StatusItemMetric(rawValue: UserDefaults.standard.string(forKey: "quick.statusMetric") ?? "") ?? .icon
+        let title: String
+        switch mode {
+        case .icon: title = ""
+        case .shortcuts: title = summary.shortcutCount.formatted()
+        case .mainKeys: title = summary.keyPresses.formatted(.number.precision(.fractionLength(0)))
+        case .mouseClicks: title = summary.mouseClicks.formatted(.number.precision(.fractionLength(0)))
+        case .activeTime: title = Self.shortDuration(summary.activeSeconds)
+        case .networkDownload:
+            let value = rows.filter { $0.metric == "network.download.bytes" }.reduce(0) { $0 + $1.value }
+            title = Self.byteCount(value)
+        }
+        item.length = title.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        button.title = title.isEmpty ? "" : " " + title
+        button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+        button.toolTip = "ShortcutStats · \(state.title)" + (title.isEmpty ? "" : " · \(mode.title) \(title)")
+        button.image = NSImage(systemSymbolName: state.symbol, accessibilityDescription: state.title)
+    }
+    private static func shortDuration(_ seconds: Double) -> String {
+        let minutes = max(0, Int(seconds / 60))
+        return minutes >= 60 ? "\(minutes / 60)h\(minutes % 60)m" : "\(minutes)m"
+    }
+    private static func byteCount(_ value: Double) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
     }
 
     @objc private func showWindow() {
@@ -83,6 +116,7 @@ struct Dashboard: View {
     @State private var search = ""
     @State private var section = "统计总览"
     @State private var showHidden = false
+    @State private var showDataManagement = false
     @AppStorage("hiddenShortcuts") private var hiddenJSON = "[]"
     private var hidden: Set<String> {
         Set((try? JSONDecoder().decode([String].self, from: Data(hiddenJSON.utf8))) ?? [])
@@ -107,7 +141,20 @@ struct Dashboard: View {
         Statistics.filtered(monitor.records, from: since, through: through, appID: appID)
     }
     private var selectedActivityRows: [HourMetric] {
-        monitor.activityRows(from: since, through: through, appID: appID)
+        let scoped = monitor.activityRows(from: since, through: through, appID: appID)
+        guard !appID.isEmpty else { return scoped }
+        return scoped + monitor.activityRows(from: since, through: through, appID: NetworkTracker.systemAppID)
+    }
+    private var calendarRecords: [UsageRecord] {
+        Statistics.filtered(monitor.records, from: "", through: "9999-12-31", appID: appID)
+    }
+    private var calendarRows: [HourMetric] {
+        let scoped = monitor.activityRows(from: "", through: "9999-12-31", appID: appID)
+        guard !appID.isEmpty else { return scoped }
+        return scoped + monitor.activityRows(from: "", through: "9999-12-31", appID: NetworkTracker.systemAppID)
+    }
+    private var networkRows: [HourMetric] {
+        monitor.activityRows(from: since, through: through, appID: NetworkTracker.systemAppID)
     }
     private var visibleRecords: [UsageRecord] {
         Statistics.filtered(selectedRecords, from: since, through: through, appID: appID, search: search, hidden: hidden)
@@ -116,7 +163,7 @@ struct Dashboard: View {
     private var apps: [(id: String, name: String)] {
         var result: [String: String] = [:]
         for record in monitor.records { result[record.appID] = record.appName }
-        for row in monitor.activityRows(from: "", through: "9999", appID: "") { result[row.appID] = row.appName }
+        for row in monitor.activityRows(from: "", through: "9999", appID: "") where row.appID != NetworkTracker.systemAppID { result[row.appID] = row.appName }
         return result.map { (id: $0.key, name: $0.value) }.sorted { $0.name < $1.name }
     }
 
@@ -181,7 +228,7 @@ struct Dashboard: View {
                 }
             }
             Picker("统计视图", selection: $section) {
-                ForEach(["统计总览", "排行榜", "应用时长", "每日趋势", "键盘热力图", "键鼠与小时"], id: \.self) { Text($0).tag($0) }
+                ForEach(["统计总览", "排行榜", "应用时长", "每日趋势", "日历热力图", "键盘热力图", "网络流量", "键鼠与小时"], id: \.self) { Text($0).tag($0) }
             }.pickerStyle(.segmented)
             if invalidRange {
                 ContentUnavailableView("日期范围无效", systemImage: "calendar", description: Text("开始日期不能晚于结束日期。"))
@@ -189,7 +236,7 @@ struct Dashboard: View {
             } else if section == "统计总览" {
                 StatisticsOverview(rows: selectedActivityRows, records: selectedRecords)
             } else if section == "应用时长" {
-                AppUsageRankingView(rows: selectedActivityRows)
+                AppUsageRankingView(rows: selectedActivityRows, records: selectedRecords)
             } else if section == "排行榜" {
                 HStack {
                     TextField("搜索组合键，例如 ⌘C 或 Space", text: $search)
@@ -203,6 +250,13 @@ struct Dashboard: View {
                 RankingList(ranking: ranking) { shortcut in setHidden(hidden.union([shortcut])) }
             } else if section == "每日趋势" {
                 UsageTrend(records: selectedRecords, from: since, through: through)
+            } else if section == "日历热力图" {
+                CalendarHeatmapView(records: calendarRecords, rows: calendarRows, selectedDay: $selectedDay) { date in
+                    selectedDay = date
+                    monitor.days = -2
+                }
+            } else if section == "网络流量" {
+                NetworkUsageView(rows: networkRows)
             } else if section == "键鼠与小时" {
                 ActivityDashboard(rows: selectedActivityRows)
             } else {
@@ -230,6 +284,7 @@ struct Dashboard: View {
                     Button("导出完整备份…") { monitor.exportBackup() }
                     Button("从备份恢复…") { monitor.importBackup() }
                 }
+                Button("数据管理") { showDataManagement = true }
                 Spacer()
                 Button("检查更新…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
@@ -275,6 +330,9 @@ struct Dashboard: View {
                     }
                 }.padding(24).frame(width: 570, height: 400)
             }
+            .sheet(isPresented: $showDataManagement) {
+                DataManagementView(monitor: monitor)
+            }
             .alert("输入监控权限尚未生效", isPresented: $monitor.showPermissionHelp) {
                 Button("打开系统设置") { monitor.openPermissionSettings() }
                 Button("稍后处理", role: .cancel) { }
@@ -308,12 +366,44 @@ private struct StartupSettings: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider()
+            MenuBarSettingsSection()
+            Divider()
             UpdateSettings()
         }
         .padding(24).frame(width: 480)
         .onAppear { login.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             login.refresh()
+        }
+    }
+}
+
+private struct MenuBarSettingsSection: View {
+    @AppStorage("quick.statusMetric") private var statusMetric = StatusItemMetric.icon.rawValue
+    @AppStorage("quick.show.mainKeys") private var showMainKeys = true
+    @AppStorage("quick.show.shortcuts") private var showShortcuts = true
+    @AppStorage("quick.show.mouse") private var showMouse = true
+    @AppStorage("quick.show.active") private var showActive = true
+    @AppStorage("quick.show.network") private var showNetwork = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("菜单栏").font(.headline)
+            Picker("图标旁显示", selection: $statusMetric) {
+                ForEach(StatusItemMetric.allCases) { metric in Text(metric.title).tag(metric.rawValue) }
+            }
+            Text("快捷摘要显示项目").font(.subheadline).foregroundStyle(.secondary)
+            HStack {
+                Toggle("主键", isOn: $showMainKeys)
+                Toggle("快捷键", isOn: $showShortcuts)
+                Toggle("鼠标", isOn: $showMouse)
+            }
+            HStack {
+                Toggle("活跃时长", isOn: $showActive)
+                Toggle("网络流量", isOn: $showNetwork)
+            }
+            Text("菜单栏数字始终显示今天、全部应用的数据；快捷摘要也独立于主窗口筛选。")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

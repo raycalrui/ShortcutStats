@@ -4,7 +4,10 @@ import UniformTypeIdentifiers
 extension Monitor {
     func exportActivityCSV(kind: ActivityCSVKind, from: String, through: String, appID: String) {
         do {
-            let rows = try activityRowsForExport(from: from, through: through, appID: appID)
+            // Network counters describe the whole Mac and are never attributed
+            // to the foreground application selected in the dashboard.
+            let exportAppID = kind == .network ? NetworkTracker.systemAppID : appID
+            let rows = try activityRowsForExport(from: from, through: through, appID: exportAppID)
             let content = ActivityCSV.csv(rows: rows, kind: kind)
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.commaSeparatedText]

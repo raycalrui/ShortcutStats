@@ -1,12 +1,13 @@
 import Foundation
 
 enum ActivityCSVKind: String, CaseIterable {
-    case appTime, input, hourly
+    case appTime, input, network, hourly
 
     var title: String {
         switch self {
         case .appTime: "应用活跃时长"
         case .input: "键鼠每日统计"
+        case .network: "网络每日统计"
         case .hourly: "每小时统计"
         }
     }
@@ -14,6 +15,7 @@ enum ActivityCSVKind: String, CaseIterable {
         switch self {
         case .appTime: "ShortcutStats-AppTime.csv"
         case .input: "ShortcutStats-Input.csv"
+        case .network: "ShortcutStats-Network.csv"
         case .hourly: "ShortcutStats-Hourly.csv"
         }
     }
@@ -58,6 +60,16 @@ enum ActivityCSV {
                               quote(key.metric), number(values.reduce(0) { $0 + $1.value }), quote(unit(key.metric))]
                     .joined(separator: ","))
             }
+        case .network:
+            header = "date,metric,value,unit"
+            let network = valid.filter { $0.metric == "network.download.bytes" || $0.metric == "network.upload.bytes" }
+            let groups = Dictionary(grouping: network) { "\($0.day)\u{1F}\($0.metric)" }
+            for key in groups.keys.sorted() {
+                let values = groups[key]!
+                guard let row = values.first else { continue }
+                lines.append([quote(row.day), quote(row.metric), number(values.reduce(0) { $0 + $1.value }), "\"bytes\""]
+                    .joined(separator: ","))
+            }
         case .hourly:
             header = "hour_utc,collected_local_date,app_id,app_name,metric,value,unit"
             let formatter = ISO8601DateFormatter()
@@ -81,6 +93,7 @@ enum ActivityCSV {
         case "mouse.distance": return "event_units"
         case "mouse.scroll.pixels": return "points"
         case "mouse.scroll.lines": return "lines"
+        case "network.download.bytes", "network.upload.bytes": return "bytes"
         default: return "unknown"
         }
     }

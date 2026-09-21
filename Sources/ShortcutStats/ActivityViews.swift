@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import AppKit
 
 struct ActivityDashboard: View {
     let rows: [HourMetric]
@@ -70,9 +71,11 @@ struct ActivityDashboard: View {
 /// Both views receive the same date/app-filtered range as the other statistics tabs.
 struct AppUsageRankingView: View {
     let rows: [HourMetric]
+    let records: [UsageRecord]
     @AppStorage("metrics.active") private var active = false
+    @State private var selectedApp: AppActivityRanking?
 
-    private var summary: ActivitySummary { ActivitySummary(rows: rows, records: []) }
+    private var summary: ActivitySummary { ActivitySummary(rows: rows, records: records) }
 
     var body: some View {
         let data = summary
@@ -98,7 +101,13 @@ struct AppUsageRankingView: View {
                 } else {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         ForEach(Array(data.appRankings.enumerated()), id: \.element.id) { index, app in
-                            rankingRow(app, rank: index + 1)
+                            Button {
+                                selectedApp = app
+                            } label: {
+                                rankingRow(app, rank: index + 1)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("打开应用详情")
                         }
                     }
                 }
@@ -106,12 +115,16 @@ struct AppUsageRankingView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(.vertical, 8)
         }
+        .sheet(item: $selectedApp) { app in
+            AppDetailView(app: app, rows: rows, records: records)
+        }
     }
 
     private func rankingRow(_ app: AppActivityRanking, rank: Int) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Text(String(rank)).font(.headline).foregroundStyle(.secondary)
                 .frame(width: 28, alignment: .trailing).padding(.top, 2)
+            AppIdentityIcon(bundleID: app.id, size: 38)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(app.name).font(.headline).lineLimit(1).help(app.id)
@@ -126,7 +139,181 @@ struct AppUsageRankingView: View {
                     .accessibilityLabel("\(app.name) 占比")
                     .accessibilityValue(app.share.formatted(.percent.precision(.fractionLength(1))))
             }
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
         }
+        .contentShape(Rectangle())
+    }
+}
+
+/// Resolves installed application icons once and retains them only in memory.
+/// Bundle IDs are used as the cache key so applications with the same display name remain distinct.
+@MainActor
+private final class AppIconCache {
+    static let shared = AppIconCache()
+
+    private var icons: [String: NSImage] = [:]
+    private let fallback = NSImage(systemSymbolName: "app", accessibilityDescription: "应用") ?? NSImage()
+
+    func icon(for bundleID: String) -> NSImage {
+        if let icon = icons[bundleID] { return icon }
+        let icon: NSImage
+        if !bundleID.isEmpty,
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            icon = NSWorkspace.shared.icon(forFile: url.path)
+        } else {
+            icon = fallback
+        }
+        icons[bundleID] = icon
+        return icon
+    }
+}
+
+private struct AppIdentityIcon: View {
+    let bundleID: String
+    let size: CGFloat
+    @State private var icon: NSImage?
+
+    var body: some View {
+        Group {
+            if let icon {
+                Image(nsImage: icon).resizable().scaledToFit()
+            } else {
+                Image(systemName: "app")
+                    .resizable().scaledToFit().padding(size * 0.14)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+        .task(id: bundleID) {
+            icon = AppIconCache.shared.icon(for: bundleID)
+        }
+    }
+}
+
+private struct AppDetailView: View {
+    let app: AppActivityRanking
+    let rows: [HourMetric]
+    let records: [UsageRecord]
+    @Environment(\.dismiss) private var dismiss
+
+    private var appRows: [HourMetric] { rows.filter { $0.appID == app.id } }
+    private var appRecords: [UsageRecord] { records.filter { $0.appID == app.id } }
+
+    private var activeSeconds: Double {
+        appRows.filter { $0.metric == "active.seconds" && $0.value.isFinite && $0.value > 0 }
+            .reduce(0) { $0 + $1.value }
+    }
+
+    private var keyPresses: Double {
+        appRows.filter { $0.metric.hasPrefix("key:") && $0.metric.count > 4 && $0.value.isFinite && $0.value > 0 }
+            .reduce(0) { $0 + $1.value }
+    }
+
+    private var shortcutCount: Int {
+        appRecords.reduce(0) { $0 + max(0, $1.count) }
+    }
+
+    private var mouseClicks: Double {
+        appRows.filter { ["mouse.left", "mouse.right", "mouse.other"].contains($0.metric) && $0.value.isFinite && $0.value > 0 }
+            .reduce(0) { $0 + $1.value }
+    }
+
+    private var hourlyActivity: [(hour: Date, seconds: Double)] {
+        Dictionary(grouping: appRows.filter {
+            $0.metric == "active.seconds" && $0.value.isFinite && $0.value > 0
+        }, by: \.hour)
+        .map { (hour: $0.key, seconds: $0.value.reduce(0) { $0 + $1.value }) }
+        .sorted { $0.hour < $1.hour }
+    }
+
+    private var topShortcuts: [Ranking] {
+        Dictionary(grouping: appRecords.filter { $0.count > 0 }, by: \.shortcut)
+            .map { Ranking(shortcut: $0.key, count: $0.value.reduce(0) { $0 + $1.count }) }
+            .sorted { $0.count == $1.count ? $0.shortcut < $1.shortcut : $0.count > $1.count }
+            .prefix(10).map { $0 }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                AppIdentityIcon(bundleID: app.id, size: 52)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(app.name).font(.title2.bold()).lineLimit(1)
+                    Text(app.id).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                Spacer()
+                Button("完成") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(20)
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                        detailMetric("活跃时长", ActivityDisplay.duration(activeSeconds), symbol: "clock")
+                        detailMetric("当前范围占比", app.share.formatted(.percent.precision(.fractionLength(1))), symbol: "chart.pie")
+                        detailMetric("主键按下", ActivityDisplay.count(keyPresses), symbol: "keyboard")
+                        detailMetric("快捷键", shortcutCount.formatted(), symbol: "command")
+                        detailMetric("鼠标点击", ActivityDisplay.count(mouseClicks), symbol: "computermouse")
+                    }
+
+                    Divider()
+                    Text("每小时活跃趋势").font(.headline)
+                    if hourlyActivity.isEmpty {
+                        Text("当前筛选范围内暂无活跃时长数据。")
+                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 100)
+                    } else {
+                        Chart(hourlyActivity, id: \.hour) { point in
+                            BarMark(
+                                x: .value("小时", point.hour),
+                                y: .value("分钟", point.seconds / 60)
+                            )
+                        }
+                        .frame(height: 180)
+                        .chartYAxisLabel("分钟")
+                    }
+
+                    Divider()
+                    Text("常用快捷键").font(.headline)
+                    if topShortcuts.isEmpty {
+                        Text("当前筛选范围内暂无快捷键数据。")
+                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 80)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(topShortcuts.enumerated()), id: \.element.id) { index, shortcut in
+                                HStack(spacing: 12) {
+                                    Text("\(index + 1)").foregroundStyle(.secondary).frame(width: 24, alignment: .trailing)
+                                    Text(shortcut.shortcut).font(.system(.body, design: .monospaced).bold())
+                                    Spacer()
+                                    Text("\(shortcut.count) 次").monospacedDigit().foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 9)
+                                if index < topShortcuts.count - 1 { Divider() }
+                            }
+                        }
+                    }
+
+                    Text("详情严格按应用标识符筛选，并跟随主窗口的日期范围。活跃时长为前台且未空闲的采样时间。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(20)
+            }
+        }
+        .frame(minWidth: 680, idealWidth: 760, minHeight: 620, idealHeight: 720)
+    }
+
+    private func detailMetric(_ title: String, _ value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.title3.bold()).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
+        .padding(14)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -136,6 +323,7 @@ struct StatisticsOverview: View {
     @AppStorage("metrics.keyboard") private var keyboard = false
     @AppStorage("metrics.mouse") private var mouse = false
     @AppStorage("metrics.active") private var active = false
+    @AppStorage("metrics.network") private var network = false
 
     var body: some View {
         let data = ActivitySummary(rows: rows, records: records)
@@ -150,12 +338,15 @@ struct StatisticsOverview: View {
                     metricCard("鼠标点击", value: ActivityDisplay.count(data.mouseClicks), symbol: "computermouse", note: "左键、右键与其他按钮合计", enabled: mouse)
                     metricCard("活跃时长", value: ActivityDisplay.duration(data.activeSeconds), symbol: "clock", note: "前台应用活跃时间合计", enabled: active)
                     metricCard("最常用 App", value: data.appRankings.first?.name ?? "暂无数据", symbol: "app", note: data.appRankings.first.map { "按活跃时长 · \(ActivityDisplay.duration($0.seconds))" } ?? "以当前范围内的活跃时长排名", enabled: active)
+                    let networkBytes = rows.filter { $0.metric == "network.download.bytes" || $0.metric == "network.upload.bytes" }.reduce(0) { $0 + $1.value }
+                    metricCard("网络流量", value: ActivityDisplay.bytes(networkBytes), symbol: "network", note: "整机活动接口上传与下载合计", enabled: network)
                 }
                 Divider()
                 Text("采集设置").font(.headline)
                 Toggle("统计全部主键", isOn: $keyboard)
                 Toggle("统计鼠标点击、滚动与移动", isOn: $mouse)
                 Toggle("统计前台应用活跃时长", isOn: $active)
+                Toggle("统计整机网络流量", isOn: $network)
                 Text("开关仅控制后续采集，关闭后保留历史；顶部暂停会停止全部采集。主键与快捷键存在重叠，不能相加作为总输入次数。")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("主键不是输入字符数，也不单独累计修饰键。活跃时长以 60 秒无操作判为空闲，不累计锁屏、睡眠和暂停。小时指标只覆盖开启采集后的时段，不补算历史；零值可能代表尚未采集。")
@@ -180,6 +371,10 @@ struct StatisticsOverview: View {
 }
 
 private enum ActivityDisplay {
+    static func bytes(_ value: Double) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
+    }
+
     static func count(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0)))
     }

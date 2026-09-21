@@ -233,3 +233,6 @@ check(dstNext.timeIntervalSince(dstPrevious) == 25 * 3600 && Statistics.dayStrin
 check(DayNavigation.canMoveForward(dstPrevious, now: dstNext, calendar: dstCalendar), "历史日期允许下一天")
 runActivityExportChecks()
 runBackupChecks()
+runNetworkMetricsChecks()
+runDataManagementChecks()
+runCalendarHeatmapChecks()

@@ -2,7 +2,7 @@
 
 本地 Mac 快捷键频率统计工具，SwiftUI + Core Graphics，使用 Sparkle 提供签名更新。macOS 14 及以上。
 
-A local-first Mac app that tracks keyboard shortcut usage, built with SwiftUI and Core Graphics. No third-party dependencies. Requires macOS 14 or later.
+A local-first Mac app that tracks keyboard shortcut usage, built with SwiftUI and Core Graphics. Sparkle is the only third-party dependency. Requires macOS 14 or later.
 
 目前为早期版本，提供源码供自行构建，尚未提供经过公证的安装包。真实使用中的统计准确性及性能仍需进一步验证。
 
@@ -25,6 +25,10 @@ This is an early version distributed as source code for you to build. No notariz
 - 统计数据保存在本机，不保存输入正文，不上传数据。
 
   Statistics stay on your Mac. Typed text is not stored, and no data is uploaded.
+
+- 应用详情与图标、日历热力图、整机网络流量、菜单栏摘要自定义，以及带安全备份的数据管理。
+
+  App details and icons, a calendar heatmap, whole-Mac network traffic, customizable menu-bar summaries, and data management with safety backups.
 
 ## 构建与使用 / Build and usage
 
@@ -105,9 +109,9 @@ Filter records by today, the last 7 days, the last 30 days, or all time, and by 
 
 ## 验证 / Validation
 
-现有 44 项逻辑检查通过独立脚本运行（不在 Xcode Test action 中）：
+现有逻辑检查通过独立脚本运行（不在 Xcode Test action 中）：
 
-Run the 44 existing logic checks using the standalone script (they are not part of the Xcode Test action):
+Run the logic checks using the standalone script (they are not part of the Xcode Test action):
 
 ```sh
 zsh scripts/check.sh
@@ -252,9 +256,9 @@ The heatmap uses a gamma-2 opacity curve: 10% + 80% × (count / group maximum)²
 
 ### 完整备份与恢复 / Complete backup and restore
 
-主窗口底部「数据备份」可导出带版本号的 JSON，包含全部快捷键（含左右修饰键）、小时键鼠及活跃时长、中断记录，也包含尚未写盘的汇总，不受当前筛选影响。备份包含应用使用历史，请自行妥善保存。采集开关、隐藏列表、登录启动和系统权限不在备份内。
+主窗口底部「数据备份」可导出带版本号的 JSON，包含全部快捷键（含左右修饰键）、小时键鼠、活跃时长、网络流量和中断记录，也包含尚未写盘的汇总，不受当前筛选影响。备份包含应用使用历史，请自行妥善保存。采集开关、隐藏列表、登录启动和系统权限不在备份内。
 
-Data Backup at the bottom of the dashboard exports versioned JSON containing all shortcuts (including modifier sides), hourly input/activity metrics and interruption history, including pending aggregates regardless of filters. Backups contain application usage history; store them appropriately. Collection preferences, hidden items, login settings and system permissions are excluded.
+Data Backup at the bottom of the dashboard exports versioned JSON containing all shortcuts (including modifier sides), hourly input/activity/network metrics and interruption history, including pending aggregates regardless of filters. Backups contain application usage history; store them appropriately. Collection preferences, hidden items, login settings and system permissions are excluded.
 
 恢复前检查格式、版本、重复记录与数值，显示确认后替换全部统计，不相加。恢复前旧数据自动保存在 `~/Library/Application Support/ShortcutStats/Backups/`。失败会尝试回滚；意外退出时下次启动先处理恢复日志。完成后保持暂停，确认数据后手动开始。当前单个备份最大 256 MB；请勿同时运行多个应用副本。
 
@@ -264,29 +268,41 @@ Restore validates the format, version, duplicate records and values before confi
 
 Use the top arrows to browse individual days, or choose the daily mode and pick a date. Forward navigation stops at today; Return to Today restores today's range. All statistics pages and CSV exports share the date/app filters. From a multi-day range, the left arrow starts one day before its end date.
 
-点击菜单栏图标可查看今日全部应用的快捷键、主键、鼠标点击和活跃时长，并暂停／开始统计或打开主窗口。该摘要独立于主窗口日期和应用筛选，未开启采集的指标会明确标注。
+点击菜单栏图标可查看今日全部应用的快捷键、主键、鼠标点击、活跃时长和网络流量，并暂停／开始统计或打开主窗口。设置中可选择菜单栏图标旁显示快捷键、主键、鼠标、时长或下载量，并分别隐藏摘要卡片。该摘要独立于主窗口日期和应用筛选，未开启采集的指标会明确标注。
 
-Click the menu-bar icon for today's all-app shortcut, main-key, mouse-click and active-time summary, with Pause/Start and Open Dashboard controls. This summary is independent of the dashboard filters and labels disabled collection explicitly.
+Click the menu-bar icon for today's all-app shortcut, main-key, mouse-click, active-time and network summary, with Pause/Start and Open Dashboard controls. Settings can show one selected metric beside the menu-bar icon and hide individual summary cards. This summary is independent of the dashboard filters and labels disabled collection explicitly.
 
-「导出 CSV」新增应用活跃时长、键鼠每日统计、每小时统计三种格式。时长单位为秒，应用占比为百分数；键鼠保留各指标单位，小时记录同时保留 UTC 时间和采集时本地日期，不把旧每日快捷键推算为小时数据。CSV 不是完整备份。
+「导出 CSV」提供应用活跃时长、键鼠每日统计、网络每日统计和每小时统计。时长单位为秒，应用占比为百分数；键鼠与网络保留各指标单位，小时记录同时保留 UTC 时间和采集时本地日期，不把旧每日快捷键推算为小时数据。网络统计属于整台 Mac，不受应用筛选影响。CSV 不是完整备份。
 
-Export CSV also offers app active time, daily keyboard/mouse metrics and hourly metrics. Durations use seconds and app shares use percentages; input metrics retain their distinct units. Hourly exports preserve UTC timestamps and the captured local date, without inferring hours from legacy daily shortcuts. CSV is not a complete backup.
+Export CSV also offers app active time, daily keyboard/mouse metrics, daily network metrics and hourly metrics. Durations use seconds and app shares use percentages; input and network metrics retain their units. Hourly exports preserve UTC timestamps and the captured local date, without inferring hours from legacy daily shortcuts. Network totals describe the whole Mac and ignore the app filter. CSV is not a complete backup.
 
 「统计总览」为默认页面，按顶部日期与应用范围展示全部主键次数、快捷键次数、鼠标点击总数、活跃时长和活跃时长最高的应用。快捷键仍使用完整的每日历史，不与全部主键相加；其他指标仅包含开启采集后的记录。未开启的指标会明确提示，关闭采集不隐藏已有历史。
 
 Overview is the default page. It shows main-key presses, shortcut uses, mouse clicks, active time and the most-used app by active time within the selected date/app range. Shortcut totals retain daily history and are not added to main-key totals. Other metrics only contain data collected after enabling them. Disabled collection is clearly labeled without hiding history.
 
-「应用时长」提供独立排行榜，按活跃时长降序排列，展示时长和占当前筛选范围总时长的比例。支持顶部今天、近 7 天、近 30 天、全部和自定义日期；选择单个应用后占比以该筛选范围为准。它表示实际采集到的前台活跃时长，不是进程运行时间。
+「应用时长」提供独立排行榜，显示已安装应用的图标，按活跃时长降序排列，展示时长和占当前筛选范围总时长的比例。点击应用可查看该应用的活跃趋势、主键、快捷键和鼠标汇总以及常用快捷键 Top 10。支持顶部今天、近 7 天、近 30 天、全部和自定义日期；选择单个应用后占比以该筛选范围为准。它表示实际采集到的前台活跃时长，不是进程运行时间。
 
-App Time ranks apps by collected foreground active time and displays durations and shares of the filtered total. It supports Today, Last 7/30 Days, All and custom dates through the top filters. Selecting one app changes the share denominator accordingly. This measures observed active usage, not process uptime.
+App Time shows installed app icons and ranks apps by collected foreground active time. Click an app for its active-time trend, keyboard/shortcut/mouse totals and top 10 shortcuts. It supports Today, Last 7/30 Days, All and custom dates through the top filters. Selecting one app changes the share denominator accordingly. This measures observed active usage, not process uptime.
+
+「日历热力图」按快捷键、主键、鼠标点击、活跃时长或网络流量展示最近约 12 个月的每日强度；点击日期会切换主窗口到该日。每种指标独立按可见峰值使用 10%–90%、Gamma＝2 的色阶。空白可能表示当时未开启采集，不代表全天为零。
+
+Calendar Heatmap shows roughly the latest 12 months by shortcuts, main keys, mouse clicks, active time or network traffic. Clicking a date switches the dashboard to that day. Each metric uses its own visible maximum with a 10%–90%, gamma-2 scale. Empty cells can mean collection was disabled, not proven zero use.
+
+「数据管理」显示记录日期范围、各类聚合数量、网络流量及统计文件和安全备份占用。可选择永久、最近 30/90/180/365 天保留，或按日期删除、分别清空快捷键和扩展小时数据。实际删除前必须再次确认并创建完整安全备份；失败回滚，完成后保持暂停。
+
+Data Management shows the recorded date range, aggregate counts, network totals, statistics files and safety-backup storage. Choose permanent or 30/90/180/365-day retention, delete a date range, or clear shortcut and hourly data separately. Every actual deletion requires confirmation and a complete safety backup; failures roll back and collection remains paused afterward.
+
+「网络流量」可选统计整台 Mac 活动网络接口的下载和上传字节，并显示每小时趋势。只保存字节增量，不记录 IP、域名、端口或数据内容，也不归因到具体 App。VPN、虚拟网卡或接口转发可能重复计算；暂停、睡眠及 App 未运行期间不补算。
+
+Network Traffic optionally records downloaded and uploaded byte deltas for active interfaces across the whole Mac and shows an hourly trend. It stores no IP addresses, domains, ports or payload content and does not attribute traffic to apps. VPNs, virtual interfaces or forwarding can double-count; paused, sleeping and offline periods are never backfilled.
 
 「键盘热力图」内可切换「快捷键」与「全部主键」，后者可直接开启采集，包含普通打字和快捷键的主键次数。切换模式清除选中的键位及修饰键筛选；全部主键模式不统计独立修饰键，顶部图标仅代表 F1–F12，不合并独立媒体事件。两种模式均保留原键盘布局与 Gamma 色阶，不推算旧数据。
 
 Keyboard Heatmap switches between Shortcuts and All Main Keys, with a collection toggle for ordinary typing and shortcut main-key counts. Switching clears the selected key and modifier filter. All Main Keys excludes standalone modifiers; top-row icons represent F1–F12 without merging separate media events. Both modes retain the keyboard layout and gamma scale; historical data is never inferred.
 
-在「键鼠与小时」页面分别开启全部主键、鼠标或前台活跃时长。三个开关默认关闭，重启后保留；关闭只停止新增，顶部暂停停止所有采集。日期和应用筛选共用。主键统计包括普通打字、Shift 组合及快捷键的物理主键，每次非自动重复 key-down 计一次，不保存文字或顺序，不单独累计修饰键按下；不与快捷键总数相加。
+在「统计总览」或对应页面可分别开启全部主键、鼠标、前台活跃时长和整机网络流量。四个开关默认关闭，重启后保留；关闭只停止新增，顶部暂停停止所有采集。日期和应用筛选共用，网络流量始终按整机显示。主键统计包括普通打字、Shift 组合及快捷键的物理主键，每次非自动重复 key-down 计一次，不保存文字或顺序，不单独累计修饰键按下；不与快捷键总数相加。
 
-In Input & Hours, independently enable all main keys, mouse metrics or foreground active time. All three default off and persist across restarts. Disabling stops new collection but keeps history; the main Pause control stops all collection. Date and app filters are shared. Main-key totals include ordinary typing, Shift combinations and shortcut main keys, excluding autorepeat. No text or sequence is stored; modifier-only presses are excluded. Do not add key totals to shortcut totals.
+Overview and the corresponding pages independently enable all main keys, mouse metrics, foreground active time and whole-Mac network traffic. All four default off and persist across restarts. Disabling stops new collection but keeps history; the main Pause control stops all collection. Date and app filters are shared, while network totals remain system-wide. Main-key totals include ordinary typing, Shift combinations and shortcut main keys, excluding autorepeat. No text or sequence is stored; modifier-only presses are excluded. Do not add key totals to shortcut totals.
 
 鼠标记录左/右/其他按钮按下次数、移动与拖动增量长度，以及绝对滚动量。移动使用事件单位，不代表厘米；连续滚动使用点（包括惯性），离散滚动使用行，累计所有轴，单位不混合。不保存位置或轨迹。
 
@@ -296,9 +312,9 @@ Mouse metrics count left/right/other button presses, movement/drag delta lengths
 
 Foreground active time is sampled about every 2 seconds with a 60-second idle threshold. Pauses, locking, display/system sleep, Secure Input and unavailable monitoring prevent collection. Resume boundaries conservatively omit about one sampling interval. This estimates active usage, not process uptime, and never backfills time while ShortcutStats was not running.
 
-新增汇总保存在 Application Support/ShortcutStats/activity.sqlite，按小时、应用和指标汇总，内存合并后每约 15 秒事务写入，正常退出保存。异常退出可能丢失最近一批。旧 statistics.json 保持原样继续用于快捷键每日历史，不进行破坏性迁移，也不推算旧的小时分布。小时使用绝对时间区分夏令时重复小时，日期筛选遵循采集时本地日期，图表以当前时区显示。空白时段可能未采集，不表示确实零使用。现有 CSV 仍只导出快捷键。
+新增汇总保存在 Application Support/ShortcutStats/activity.sqlite，按小时、应用和指标汇总，内存合并后每约 15 秒事务写入，正常退出保存。异常退出可能丢失最近一批。旧 statistics.json 保持原样继续用于快捷键每日历史，不进行破坏性迁移，也不推算旧的小时分布。小时使用绝对时间区分夏令时重复小时，日期筛选遵循采集时本地日期，图表以当前时区显示。空白时段可能未采集，不表示确实零使用。快捷键、应用时长、键鼠、网络和小时数据均可按各自 CSV 格式导出。
 
-New aggregates live in Application Support/ShortcutStats/activity.sqlite, grouped by hour, app and metric. In-memory deltas are transactionally flushed about every 15 seconds and on normal exit; abnormal termination can lose the latest batch. Existing statistics.json remains the daily shortcut history with no destructive migration or inferred hourly history. Absolute hour timestamps distinguish repeated DST hours; date filtering uses the local date at capture and charts display the current time zone. Missing hours may be unobserved rather than zero usage. Existing CSV exports remain shortcut-only.
+New aggregates live in Application Support/ShortcutStats/activity.sqlite, grouped by hour, app and metric. In-memory deltas are transactionally flushed about every 15 seconds and on normal exit; abnormal termination can lose the latest batch. Existing statistics.json remains the daily shortcut history with no destructive migration or inferred hourly history. Absolute hour timestamps distinguish repeated DST hours; date filtering uses the local date at capture and charts display the current time zone. Missing hours may be unobserved rather than zero usage. Shortcuts, app time, input, network and hourly data have separate CSV formats.
 
 ### 更新后权限身份 / Permission identity across updates
 
