@@ -199,6 +199,7 @@ private struct AppDetailView: View {
     let rows: [HourMetric]
     let records: [UsageRecord]
     @Environment(\.dismiss) private var dismiss
+    @State private var hoveredHour: Date?
 
     private var appRows: [HourMetric] { rows.filter { $0.appID == app.id } }
     private var appRecords: [UsageRecord] { records.filter { $0.appID == app.id } }
@@ -228,6 +229,41 @@ private struct AppDetailView: View {
         }, by: \.hour)
         .map { (hour: $0.key, seconds: $0.value.reduce(0) { $0 + $1.value }) }
         .sorted { $0.hour < $1.hour }
+    }
+
+    private var hourlyPeak: (hour: Date, seconds: Double)? {
+        hourlyActivity.max { lhs, rhs in
+            lhs.seconds == rhs.seconds ? lhs.hour > rhs.hour : lhs.seconds < rhs.seconds
+        }
+    }
+
+    private var isSingleDayChart: Bool {
+        guard let first = hourlyActivity.first, let last = hourlyActivity.last else { return true }
+        return Calendar.current.isDate(first.hour, inSameDayAs: last.hour)
+    }
+
+    private var hourlyDomain: ClosedRange<Date> {
+        guard let first = hourlyActivity.first, let last = hourlyActivity.last else {
+            let now = Date()
+            return now...now.addingTimeInterval(3600)
+        }
+        if isSingleDayChart, let day = Calendar.current.dateInterval(of: .day, for: first.hour) {
+            return day.start...day.end
+        }
+        let end = Calendar.current.date(byAdding: .hour, value: 1, to: last.hour) ?? last.hour.addingTimeInterval(3600)
+        return first.hour...end
+    }
+
+    private var hourlyMaximum: Double {
+        let peak = max(1, (hourlyPeak?.seconds ?? 0) / 60)
+        let step = peak <= 20 ? 5.0 : peak <= 60 ? 10.0 : peak <= 120 ? 20.0 : 30.0
+        return max(step * 2, ceil((peak * 1.1) / step) * step)
+    }
+
+    private var hoveredActivity: (hour: Date, seconds: Double)? {
+        guard let hoveredHour,
+              let bucket = Calendar.current.dateInterval(of: .hour, for: hoveredHour)?.start else { return nil }
+        return hourlyActivity.first { abs($0.hour.timeIntervalSince(bucket)) < 1 }
     }
 
     private var topShortcuts: [Ranking] {
@@ -262,18 +298,96 @@ private struct AppDetailView: View {
                     }
 
                     Divider()
-                    Text("每小时活跃趋势").font(.headline)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("每小时活跃趋势").font(.headline)
+                        Spacer()
+                        if let peak = hourlyPeak {
+                            Text("\(hourlyActivity.count) 个活跃小时 · 峰值 \(peakLabel(peak.hour))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     if hourlyActivity.isEmpty {
                         Text("当前筛选范围内暂无活跃时长数据。")
                             .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 100)
                     } else {
-                        Chart(hourlyActivity, id: \.hour) { point in
-                            BarMark(
-                                x: .value("小时", point.hour),
-                                y: .value("分钟", point.seconds / 60)
-                            )
+                        Chart {
+                            ForEach(hourlyActivity, id: \.hour) { point in
+                                RectangleMark(
+                                    xStart: .value("小时开始", point.hour.addingTimeInterval(360)),
+                                    xEnd: .value("小时结束", point.hour.addingTimeInterval(3240)),
+                                    yStart: .value("起点", 0.0),
+                                    yEnd: .value("分钟", point.seconds / 60)
+                                )
+                                .cornerRadius(3)
+                            }
+
+                            if let hovered = hoveredActivity {
+                                RuleMark(x: .value("选中小时", hovered.hour.addingTimeInterval(1800)))
+                                    .foregroundStyle(.secondary.opacity(0.7))
+                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                                    .annotation(position: .top, spacing: 6) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(hourRangeLabel(hovered.hour)).fontWeight(.semibold)
+                                            Text("活跃 \(ActivityDisplay.duration(hovered.seconds))")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
+                                    }
+                            }
                         }
-                        .frame(height: 180)
+                        .chartXScale(domain: hourlyDomain)
+                        .chartYScale(domain: 0...hourlyMaximum)
+                        .chartXAxis {
+                            if isSingleDayChart {
+                                AxisMarks(values: .stride(by: .hour, count: 3)) { value in
+                                    AxisGridLine()
+                                    AxisTick()
+                                    AxisValueLabel {
+                                        if let date = value.as(Date.self) { Text(hourLabel(date)) }
+                                    }
+                                }
+                            } else {
+                                AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                                    AxisGridLine()
+                                    AxisTick()
+                                    AxisValueLabel {
+                                        if let date = value.as(Date.self) {
+                                            Text(date.formatted(.dateTime.month().day().hour()))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .chartYAxis {
+                            AxisMarks(position: .trailing, values: [0, hourlyMaximum / 2, hourlyMaximum]) {
+                                AxisGridLine()
+                                AxisTick()
+                                AxisValueLabel()
+                            }
+                        }
+                        .chartOverlay { proxy in
+                            GeometryReader { geometry in
+                                Rectangle()
+                                    .fill(.clear)
+                                    .contentShape(Rectangle())
+                                    .onContinuousHover { phase in
+                                        switch phase {
+                                        case .active(let location):
+                                            guard let plotFrame = proxy.plotFrame else { return }
+                                            let frame = geometry[plotFrame]
+                                            let x = location.x - frame.origin.x
+                                            hoveredHour = x >= 0 && x <= frame.width ? proxy.value(atX: x) : nil
+                                        case .ended:
+                                            hoveredHour = nil
+                                        }
+                                    }
+                            }
+                        }
+                        .frame(height: 150)
                         .chartYAxisLabel("分钟")
                     }
 
@@ -314,6 +428,21 @@ private struct AppDetailView: View {
         .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
         .padding(14)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func hourLabel(_ date: Date) -> String {
+        date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)))
+    }
+
+    private func hourRangeLabel(_ date: Date) -> String {
+        let end = Calendar.current.date(byAdding: .hour, value: 1, to: date) ?? date.addingTimeInterval(3600)
+        let range = "\(hourLabel(date)):00–\(hourLabel(end)):00"
+        return isSingleDayChart ? range : "\(date.formatted(.dateTime.month().day())) · \(range)"
+    }
+
+    private func peakLabel(_ date: Date) -> String {
+        let hour = "\(hourLabel(date)):00"
+        return isSingleDayChart ? hour : "\(date.formatted(.dateTime.month().day())) \(hour)"
     }
 }
 
