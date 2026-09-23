@@ -26,6 +26,8 @@
 | `Sources/ShortcutStats/NetworkMetrics.swift` | 整机网络接口计数器与增量计算 |
 | `Sources/ShortcutStats/NetworkUsageView.swift` | 网络流量卡片和小时趋势 |
 | `Sources/ShortcutStats/MenuBarPreferences.swift` | 菜单栏指标与快捷摘要偏好 |
+| `Sources/ShortcutStats/Localization.swift` | App 语言偏好、格式化、持久化名称的展示翻译及安全重启通知 |
+| `Resources/{en,zh-Hans}.lproj/Localizable.strings` | 英文与简体中文界面资源；英文是开发语言 |
 | `Configuration/Info.plist` | App 元数据与菜单栏应用配置 |
 | `ShortcutStats.xcodeproj` | App target、构建配置和共享 Scheme |
 | `Tests/main.swift` | 独立逻辑检查程序，不是 XCTest target |
@@ -75,6 +77,7 @@ codesign --verify --strict --verbose=2 dist/ShortcutStats.app
 
 - 公开版保持 Bundle ID `cc.raycal.ShortcutStats`；本机开发签名可在忽略的配置中设置 `SHORTCUTSTATS_BUNDLE_ID = cc.raycal.ShortcutStats.local`，避免与公开版混用权限身份。本机版禁用公开更新。两者共用数据位置 `~/Library/Application Support/ShortcutStats/statistics.json`，不要同时运行；不得为区分身份迁移或清空数据。
 - 保存记录包含日期、应用 ID、应用名、组合键和次数。日期遵循 Mac 本地日历，CSV 导出遵循当前筛选条件。
+- 媒体键名称和整机网络记录中的 `整台 Mac` 已进入持久化数据与统计别名逻辑；本地化只能在展示层转换，不得直接改写旧记录或 canonical 值。
 - 保留原子保存、正常退出保存以及读取失败时保护原文件的行为。不要为调试删除、覆盖或提交用户真实统计。
 - 修改持久化格式时提供向后兼容方案；验证使用合成样本或隔离副本。
 - CSV 编码须保留引号转义和公式注入防护。

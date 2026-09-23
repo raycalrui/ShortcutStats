@@ -8,7 +8,7 @@ enum DataRetention: Int, CaseIterable, Identifiable {
     case days365 = 365
 
     var id: Int { rawValue }
-    var title: String { rawValue == 0 ? "永久保留" : "保留最近 \(rawValue) 天" }
+    var title: String { rawValue == 0 ? L10n.string("永久保留") : L10n.format("保留最近 %d 天", rawValue) }
 
     static func validated(_ value: Int) -> DataRetention {
         DataRetention(rawValue: value) ?? .forever
@@ -52,12 +52,12 @@ enum DataManagement {
                        fileManager: FileManager = .default,
                        calendar: Calendar = .current) -> DataManagementReport {
         let fixedFiles = [
-            ("statistics.json", "快捷键数据"),
-            ("interruptions.json", "中断记录"),
-            ("activity.sqlite", "扩展小时数据"),
-            ("activity.sqlite-wal", "扩展数据日志"),
-            ("activity.sqlite-shm", "扩展数据共享内存"),
-            ("restore-pending.json", "恢复保护日志")
+            ("statistics.json", L10n.string("快捷键数据")),
+            ("interruptions.json", L10n.string("中断记录")),
+            ("activity.sqlite", L10n.string("扩展小时数据")),
+            ("activity.sqlite-wal", L10n.string("扩展数据日志")),
+            ("activity.sqlite-shm", L10n.string("扩展数据共享内存")),
+            ("restore-pending.json", L10n.string("恢复保护日志"))
         ]
         var files = fixedFiles.compactMap { name, title -> ManagedFileUsage? in
             let size = fileSize(directory.appendingPathComponent(name), fileManager: fileManager)
@@ -66,7 +66,7 @@ enum DataManagement {
         let backups = directory.appendingPathComponent("Backups", isDirectory: true)
         let backupBytes = recursiveSize(backups, fileManager: fileManager)
         if backupBytes > 0 {
-            files.append(ManagedFileUsage(id: "Backups", title: "安全备份", bytes: backupBytes))
+            files.append(ManagedFileUsage(id: "Backups", title: L10n.string("安全备份"), bytes: backupBytes))
         }
 
         var days = backup.records.map(\.day) + backup.hours.map(\.day)
@@ -103,7 +103,7 @@ enum DataManagement {
         case let .dateRange(from, through):
             guard from <= through,
                   let interval = inclusiveInterval(from: from, through: through, calendar: calendar) else {
-                throw BackupCodec.invalid("删除日期范围无效")
+                throw BackupCodec.invalid(L10n.string("删除日期范围无效"))
             }
             replacement = StatisticsBackup(
                 records: backup.records.filter { $0.day < from || $0.day > through },

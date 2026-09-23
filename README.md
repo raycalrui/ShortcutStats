@@ -134,6 +134,13 @@ Issues and pull requests are welcome. Please include your macOS and Xcode versio
 This project is licensed under the [MIT License](LICENSE).
 
 
+## 界面语言 / Interface language
+
+ShortcutStats 提供英文和简体中文界面。默认「跟随系统」：简体中文系统显示中文，其他系统语言显示英文；也可以在主窗口底部打开「设置」，手动选择 English 或简体中文。语言偏好保存在本机，切换后 App 会先保存统计状态，再自动重新启动使菜单栏、主窗口、设置、权限说明和错误提示统一生效。
+
+ShortcutStats includes English and Simplified Chinese interfaces. The default is **Follow System**: Simplified Chinese systems use Chinese, while all other system languages use English. You can also open **Settings** from the bottom of the main window and choose English or Simplified Chinese manually. The preference is stored locally. After a change, the app saves its tracking state and relaunches automatically so the menu bar, main window, settings, permission guidance, and error messages use the same language.
+
+
 ## 登录时启动 / Launch at login
 
 在主窗口底部点击「设置」，开启「登录时启动 ShortcutStats」。如显示等待批准，点击「打开系统登录项设置」完成系统授权。关闭开关即可取消登录启动；设置中的状态以系统返回值为准，操作失败会显示错误。

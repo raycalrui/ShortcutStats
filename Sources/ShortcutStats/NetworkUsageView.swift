@@ -27,7 +27,7 @@ struct NetworkUsageView: View {
                     Spacer()
                     Toggle("统计整机网络流量", isOn: $enabled).toggleStyle(.switch)
                 }
-                Text(enabled ? "正在按活动网络接口累计上传与下载字节。" : "采集未开启；已有历史仍会显示，开启后开始累计。")
+                Text(L10n.string(enabled ? "正在按活动网络接口累计上传与下载字节。" : "采集未开启；已有历史仍会显示，开启后开始累计。"))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack(spacing: 14) {
                     networkCard("下载", bytes: total("network.download.bytes"), symbol: "arrow.down")
@@ -40,10 +40,10 @@ struct NetworkUsageView: View {
                         .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     Chart(hourly) { item in
-                        BarMark(x: .value("小时", item.hour), y: .value("字节", item.download))
-                            .foregroundStyle(by: .value("方向", "下载"))
-                        BarMark(x: .value("小时", item.hour), y: .value("字节", item.upload))
-                            .foregroundStyle(by: .value("方向", "上传"))
+                        BarMark(x: .value(L10n.string("小时"), item.hour), y: .value(L10n.string("字节"), item.download))
+                            .foregroundStyle(by: .value(L10n.string("方向"), L10n.string("下载")))
+                        BarMark(x: .value(L10n.string("小时"), item.hour), y: .value(L10n.string("字节"), item.upload))
+                            .foregroundStyle(by: .value(L10n.string("方向"), L10n.string("上传")))
                     }
                     .chartYAxis {
                         AxisMarks { value in
@@ -64,14 +64,14 @@ struct NetworkUsageView: View {
 
     private func networkCard(_ title: String, bytes: Double, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: symbol).foregroundStyle(.secondary)
+            Label(L10n.string(title), systemImage: symbol).foregroundStyle(.secondary)
             Text(byteCount(bytes)).font(.title2.bold()).monospacedDigit()
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func byteCount(_ value: Double) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
+        L10n.byteCount(value)
     }
 }
 

@@ -7,7 +7,9 @@ struct CalendarHeatmapView: View {
     @State private var metric = CalendarHeatmapMetric.shortcuts
 
     init(records: [UsageRecord], rows: [HourMetric], selectedDay: Binding<Date>, selectDay: @escaping (Date) -> Void) {
-        data = CalendarHeatmapData(records: records, rows: rows)
+        var calendar = Calendar.current
+        calendar.locale = AppLanguage.locale
+        data = CalendarHeatmapData(records: records, rows: rows, calendar: calendar)
         _selectedDay = selectedDay
         self.selectDay = selectDay
     }
@@ -75,22 +77,22 @@ struct CalendarHeatmapView: View {
                     .frame(width: 13, height: 13)
             }
             Text("多")
-            Text("最高 \(formatted(data.maximums[metric] ?? 0))")
+            Text(L10n.format("最高 %@", formatted(data.maximums[metric] ?? 0)))
                 .padding(.leading, 6)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("颜色从浅到深，最高 \(formatted(data.maximums[metric] ?? 0))")
+        .accessibilityLabel(L10n.format("颜色从浅到深，最高 %@", formatted(data.maximums[metric] ?? 0)))
     }
 
     private var metricNote: String {
         switch metric {
-        case .shortcuts: "快捷键使用取自每日记录，不与小时快捷键标记重复相加。"
-        case .keys: "主键只包含开启“全部主键”采集后的小时汇总，不用旧快捷键记录补算。"
-        case .mouseClicks: "鼠标点击包含左键、右键和其他按钮，不包含滚动或移动。"
-        case .activeTime: "活跃时长不包含空闲、锁屏、睡眠和暂停时段。"
-        case .networkTraffic: "网络流量仅显示开始采集后的数据；尚未启用或没有记录时显示为零。"
+        case .shortcuts: L10n.string("快捷键使用取自每日记录，不与小时快捷键标记重复相加。")
+        case .keys: L10n.string("主键只包含开启“全部主键”采集后的小时汇总，不用旧快捷键记录补算。")
+        case .mouseClicks: L10n.string("鼠标点击包含左键、右键和其他按钮，不包含滚动或移动。")
+        case .activeTime: L10n.string("活跃时长不包含空闲、锁屏、睡眠和暂停时段。")
+        case .networkTraffic: L10n.string("网络流量仅显示开始采集后的数据；尚未启用或没有记录时显示为零。")
         }
     }
 
@@ -108,11 +110,13 @@ struct CalendarHeatmapView: View {
         switch metric {
         case .activeTime:
             let minutes = value / 60
-            return minutes < 60 ? "\(minutes.formatted(.number.precision(.fractionLength(0)))) 分钟" : "\((minutes / 60).formatted(.number.precision(.fractionLength(1)))) 小时"
+            return minutes < 60
+                ? L10n.format("%@ 分钟", minutes.formatted(.number.locale(AppLanguage.locale).precision(.fractionLength(0))))
+                : L10n.format("%@ 小时", (minutes / 60).formatted(.number.locale(AppLanguage.locale).precision(.fractionLength(1))))
         case .networkTraffic:
-            return ByteCountFormatter.string(fromByteCount: Int64(min(value, Double(Int64.max))), countStyle: .file)
+            return L10n.byteCount(value)
         default:
-            return "\(value.formatted(.number.precision(.fractionLength(0)))) 次"
+            return L10n.format("%@ 次", value.formatted(.number.locale(AppLanguage.locale).precision(.fractionLength(0))))
         }
     }
 }
@@ -150,8 +154,8 @@ private struct CalendarHeatmapWeekView: View {
                             .frame(width: 13, height: 13)
                     }
                     .buttonStyle(.plain)
-                    .help("\(day.day)：\(display(count))")
-                    .accessibilityLabel("\(day.day)，\(metric.title) \(display(count))")
+                    .help(L10n.format("%@：%@", day.day, display(count)))
+                    .accessibilityLabel(L10n.format("%@，%@ %@", day.day, metric.title, display(count)))
                 }
             }
         }
@@ -164,11 +168,11 @@ private struct CalendarHeatmapWeekView: View {
     private func display(_ value: Double) -> String {
         switch metric {
         case .activeTime:
-            return "\((value / 60).formatted(.number.precision(.fractionLength(1)))) 分钟"
+            return L10n.format("%@ 分钟", (value / 60).formatted(.number.locale(AppLanguage.locale).precision(.fractionLength(1))))
         case .networkTraffic:
-            return ByteCountFormatter.string(fromByteCount: Int64(min(value, Double(Int64.max))), countStyle: .file)
+            return L10n.byteCount(value)
         default:
-            return "\(value.formatted(.number.precision(.fractionLength(0)))) 次"
+            return L10n.format("%@ 次", value.formatted(.number.locale(AppLanguage.locale).precision(.fractionLength(0))))
         }
     }
 }

@@ -25,13 +25,13 @@ final class Monitor: ObservableObject {
     func activityRows(from: String, through: String, appID: String) -> [HourMetric] {
         do { return try activityStore?.rows(from: from, through: through, appID: appID) ?? [] }
         catch {
-            let message = "扩展统计读取失败：\(error.localizedDescription)"
+            let message = L10n.format("扩展统计读取失败：%@", error.localizedDescription)
             if activityError != message { DispatchQueue.main.async { [weak self] in self?.activityError = message } }
             return []
         }
     }
     func activityRowsForExport(from: String, through: String, appID: String) throws -> [HourMetric] {
-        guard let activityStore else { throw BackupCodec.invalid("扩展统计数据库不可用") }
+        guard let activityStore else { throw BackupCodec.invalid(L10n.string("扩展统计数据库不可用")) }
         return try activityStore.rows(from: from, through: through, appID: appID)
     }
     private func sampleActivity() {
@@ -42,12 +42,12 @@ final class Monitor: ObservableObject {
         for slice in slices { activityStore?.add(slice) }
     }
     private func flushActivity() {
-        do { try activityStore?.flush() } catch { activityError = "扩展统计保存失败：\(error.localizedDescription)" }
+        do { try activityStore?.flush() } catch { activityError = L10n.format("扩展统计保存失败：%@", error.localizedDescription) }
     }
     @Published var days = 7
     @Published var selectedAppID = ""
     @Published var records: [UsageRecord] = []
-    @Published var status = "尚未开始"
+    @Published var status = L10n.string("尚未开始")
     @Published var running = false
     @Published private(set) var wantsTracking = false
     @Published private(set) var health: TrackingState = .paused
@@ -66,7 +66,7 @@ final class Monitor: ObservableObject {
     @Published var errorMessage: String?
     @Published var showPermissionHelp = false
     @Published private(set) var waitingForPermission = false
-    let permissionHelp = "当前进程尚未获得输入监控权限。如果系统设置中已经开启，请先退出并重新打开应用；仍无效时，移除旧条目，再添加当前应用并开启权限。重新编译或使用不同副本后，旧授权可能不再适用。"
+    let permissionHelp = L10n.string("当前进程尚未获得输入监控权限。如果系统设置中已经开启，请先退出并重新打开应用；仍无效时，移除旧条目，再添加当前应用并开启权限。重新编译或使用不同副本后，旧授权可能不再适用。")
 
     func openPermissionSettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
@@ -107,7 +107,7 @@ final class Monitor: ObservableObject {
             activityStore = store
         }
         catch {
-            activityError = "扩展统计数据库或恢复日志不可用：\(error.localizedDescription)"
+            activityError = L10n.format("扩展统计数据库或恢复日志不可用：%@", error.localizedDescription)
             loadFailed = true
             historyReadable = false
         }
@@ -119,7 +119,7 @@ final class Monitor: ObservableObject {
             }
         } catch {
             loadFailed = true
-            errorMessage = "无法读取历史数据，已停止记录以保护原文件：\(error.localizedDescription)"
+            errorMessage = L10n.format("无法读取历史数据，已停止记录以保护原文件：%@", error.localizedDescription)
         }
         do {
             if FileManager.default.fileExists(atPath: historyURL.path) {
@@ -128,7 +128,7 @@ final class Monitor: ObservableObject {
             }
         } catch {
             historyReadable = false
-            historyError = "中断记录读取失败，保留原文件：\(error.localizedDescription)"
+            historyError = L10n.format("中断记录读取失败，保留原文件：%@", error.localizedDescription)
         }
         let distributed = DistributedNotificationCenter.default()
         for (name, locked) in [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)] {
@@ -347,7 +347,7 @@ final class Monitor: ObservableObject {
             try JSONEncoder().encode(gapHistory.entries).write(to: historyURL, options: .atomic)
             historyDirty = false
             historyError = nil
-        } catch { historyError = "中断记录保存失败：\(error.localizedDescription)" }
+        } catch { historyError = L10n.format("中断记录保存失败：%@", error.localizedDescription) }
     }
 
     private func receive(_ event: CGEvent) {
@@ -406,7 +406,7 @@ final class Monitor: ObservableObject {
             try data.write(to: file, options: .atomic)
             dirty = false
             lastSave = Date()
-        } catch { errorMessage = "保存失败：\(error.localizedDescription)" }
+        } catch { errorMessage = L10n.format("保存失败：%@", error.localizedDescription) }
     }
 
     func export(since: String, through: String = "9999-12-31", appID: String, search: String = "", hidden: Set<String> = []) {
@@ -417,11 +417,11 @@ final class Monitor: ObservableObject {
         do {
             let selected = Statistics.filtered(records, from: since, through: through, appID: appID, search: search, hidden: hidden)
             try Statistics.csv(selected).write(to: url, atomically: true, encoding: .utf8)
-        } catch { errorMessage = "导出失败：\(error.localizedDescription)" }
+        } catch { errorMessage = L10n.format("导出失败：%@", error.localizedDescription) }
     }
 
     private func backupSnapshot() throws -> StatisticsBackup {
-        guard !loadFailed, historyReadable, let activityStore else { throw BackupCodec.invalid("数据读取异常，无法创建完整备份；请先解决读取错误") }
+        guard !loadFailed, historyReadable, let activityStore else { throw BackupCodec.invalid(L10n.string("数据读取异常，无法创建完整备份；请先解决读取错误")) }
         return StatisticsBackup(records: Array(counts.values), hours: try activityStore.snapshot(), interruptions: gapHistory.entries)
     }
 
@@ -431,7 +431,7 @@ final class Monitor: ObservableObject {
             try activityStore?.flush()
             dataReport = DataManagement.report(directory: file.deletingLastPathComponent(), backup: try backupSnapshot())
         } catch {
-            errorMessage = "读取数据概况失败：\(error.localizedDescription)"
+            errorMessage = L10n.format("读取数据概况失败：%@", error.localizedDescription)
         }
     }
 
@@ -439,22 +439,22 @@ final class Monitor: ObservableObject {
         let from = formatter.string(from: start)
         let through = formatter.string(from: end)
         guard from <= through else {
-            errorMessage = "删除失败：起始日期不能晚于结束日期"
+            errorMessage = L10n.string("删除失败：起始日期不能晚于结束日期")
             return
         }
         requestRemoval(.dateRange(from: from, through: through),
-                       title: "删除 \(from) 至 \(through) 的全部统计？",
-                       detail: "将删除范围内的快捷键、键鼠、应用时长、网络流量，以及与该范围有交集的中断记录。")
+                       title: L10n.format("删除 %@ 至 %@ 的全部统计？", from, through),
+                       detail: L10n.string("将删除范围内的快捷键、键鼠、应用时长、网络流量，以及与该范围有交集的中断记录。"))
     }
 
     func clearShortcutData() {
-        requestRemoval(.shortcuts, title: "清空全部快捷键统计？",
-                       detail: "扩展小时数据、中断记录和设置会保留。")
+        requestRemoval(.shortcuts, title: L10n.string("清空全部快捷键统计？"),
+                       detail: L10n.string("扩展小时数据、中断记录和设置会保留。"))
     }
 
     func clearHourlyData() {
-        requestRemoval(.hourly, title: "清空全部扩展小时数据？",
-                       detail: "将清空普通按键、鼠标、应用活跃时长和网络流量等小时汇总；快捷键和中断记录会保留。")
+        requestRemoval(.hourly, title: L10n.string("清空全部扩展小时数据？"),
+                       detail: L10n.string("将清空普通按键、鼠标、应用活跃时长和网络流量等小时汇总；快捷键和中断记录会保留。"))
     }
 
     func configureRetention(days requestedDays: Int) {
@@ -463,7 +463,7 @@ final class Monitor: ObservableObject {
         guard requested != .forever else {
             retentionDays = requested.rawValue
             UserDefaults.standard.set(requested.rawValue, forKey: DataManagement.retentionDefaultsKey)
-            dataManagementNotice = "已改为永久保留统计数据。"
+            dataManagementNotice = L10n.string("已改为永久保留统计数据。")
             return
         }
         do {
@@ -471,16 +471,16 @@ final class Monitor: ObservableObject {
             guard let replacement = try DataManagement.retentionReplacement(days: requested.rawValue, backup: snapshot) else {
                 retentionDays = requested.rawValue
                 UserDefaults.standard.set(requested.rawValue, forKey: DataManagement.retentionDefaultsKey)
-                dataManagementNotice = "已设置为保留最近 \(requested.rawValue) 天；当前没有过期数据。"
+                dataManagementNotice = L10n.format("已设置为保留最近 %d 天；当前没有过期数据。", requested.rawValue)
                 refreshDataManagement()
                 return
             }
             let alert = NSAlert()
-            alert.messageText = "启用 \(requested.title)？"
-            alert.informativeText = "现有过期数据将立即删除，以后每天最多检查一次。每次实际删除前都会再次确认并先创建完整安全备份；取消不会改变当前保留期限。"
+            alert.messageText = L10n.format("启用 %@？", requested.title)
+            alert.informativeText = L10n.string("现有过期数据将立即删除，以后每天最多检查一次。每次实际删除前都会再次确认并先创建完整安全备份；取消不会改变当前保留期限。")
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "取消")
-            alert.addButton(withTitle: "备份并删除过期数据")
+            alert.addButton(withTitle: L10n.string("取消"))
+            alert.addButton(withTitle: L10n.string("备份并删除过期数据"))
             guard alert.runModal() == .alertSecondButtonReturn else { return }
             stop()
             let original = try backupSnapshot()
@@ -489,10 +489,10 @@ final class Monitor: ObservableObject {
             retentionDays = requested.rawValue
             UserDefaults.standard.set(requested.rawValue, forKey: DataManagement.retentionDefaultsKey)
             UserDefaults.standard.set(Date(), forKey: DataManagement.retentionLastCheckDefaultsKey)
-            dataManagementNotice = "已删除过期数据并保持暂停。安全备份：\(safety.path)"
+            dataManagementNotice = L10n.format("已删除过期数据并保持暂停。安全备份：%@", safety.path)
             refreshDataManagement()
         } catch {
-            errorMessage = "设置保留期限失败：\(error.localizedDescription)"
+            errorMessage = L10n.format("设置保留期限失败：%@", error.localizedDescription)
         }
     }
 
@@ -501,30 +501,30 @@ final class Monitor: ObservableObject {
             let before = try backupSnapshot()
             let preview = try DataManagement.removing(kind, from: before)
             guard managedDataChanged(before, preview) else {
-                dataManagementNotice = "没有符合条件的数据需要删除。"
+                dataManagementNotice = L10n.string("没有符合条件的数据需要删除。")
                 refreshDataManagement()
                 return
             }
             let alert = NSAlert()
             alert.messageText = title
-            alert.informativeText = detail + " 删除前会把全部现有统计保存到 Backups；失败时自动回滚。完成后统计保持暂停，设置不会删除。"
+            alert.informativeText = detail + L10n.string(" 删除前会把全部现有统计保存到 Backups；失败时自动回滚。完成后统计保持暂停，设置不会删除。")
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "取消")
-            alert.addButton(withTitle: "备份并删除")
+            alert.addButton(withTitle: L10n.string("取消"))
+            alert.addButton(withTitle: L10n.string("备份并删除"))
             guard alert.runModal() == .alertSecondButtonReturn else { return }
             stop()
             let original = try backupSnapshot()
             let replacement = try DataManagement.removing(kind, from: original)
             let safety = try replaceManagedData(with: replacement, original: original)
-            dataManagementNotice = "删除完成，统计已暂停。安全备份：\(safety.path)"
+            dataManagementNotice = L10n.format("删除完成，统计已暂停。安全备份：%@", safety.path)
             refreshDataManagement()
         } catch {
-            errorMessage = "删除失败，原数据已保留：\(error.localizedDescription)"
+            errorMessage = L10n.format("删除失败，原数据已保留：%@", error.localizedDescription)
         }
     }
 
     private func replaceManagedData(with replacement: StatisticsBackup, original: StatisticsBackup) throws -> URL {
-        guard let activityStore else { throw BackupCodec.invalid("扩展统计数据库不可用") }
+        guard let activityStore else { throw BackupCodec.invalid(L10n.string("扩展统计数据库不可用")) }
         let restore = BackupRestore(directory: file.deletingLastPathComponent())
         do {
             let safety = try restore.restore(replacement, original: original, store: activityStore)
@@ -566,20 +566,20 @@ final class Monitor: ObservableObject {
             let before = try backupSnapshot()
             guard let preview = try DataManagement.retentionReplacement(days: retentionDays, backup: before) else { return }
             let alert = NSAlert()
-            alert.messageText = "发现超过保留期限的数据"
-            alert.informativeText = "将按“保留最近 \(retentionDays) 天”删除过期统计。删除前会创建完整安全备份；取消后本次不删除，下次每日检查时再询问。"
+            alert.messageText = L10n.string("发现超过保留期限的数据")
+            alert.informativeText = L10n.format("将按“保留最近 %d 天”删除过期统计。删除前会创建完整安全备份；取消后本次不删除，下次每日检查时再询问。", retentionDays)
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "本次取消")
-            alert.addButton(withTitle: "备份并删除")
+            alert.addButton(withTitle: L10n.string("本次取消"))
+            alert.addButton(withTitle: L10n.string("备份并删除"))
             guard alert.runModal() == .alertSecondButtonReturn else { return }
             stop()
             let original = try backupSnapshot()
             let replacement = try DataManagement.retentionReplacement(days: retentionDays, backup: original) ?? preview
             let safety = try replaceManagedData(with: replacement, original: original)
-            dataManagementNotice = "已自动清理过期数据并保持暂停。安全备份：\(safety.path)"
+            dataManagementNotice = L10n.format("已自动清理过期数据并保持暂停。安全备份：%@", safety.path)
             refreshDataManagement()
         } catch {
-            errorMessage = "自动清理失败，原数据已保留：\(error.localizedDescription)"
+            errorMessage = L10n.format("自动清理失败，原数据已保留：%@", error.localizedDescription)
         }
     }
 
@@ -591,7 +591,7 @@ final class Monitor: ObservableObject {
         do {
             sampleActivity()
             try BackupCodec.encode(backupSnapshot()).write(to: url, options: .atomic)
-        } catch { errorMessage = "备份失败：\(error.localizedDescription)" }
+        } catch { errorMessage = L10n.format("备份失败：%@", error.localizedDescription) }
     }
 
     func importBackup() {
@@ -602,20 +602,20 @@ final class Monitor: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-            guard size <= 256 * 1024 * 1024 else { throw BackupCodec.invalid("备份超过 256 MB 限制") }
+            guard size <= 256 * 1024 * 1024 else { throw BackupCodec.invalid(L10n.string("备份超过 256 MB 限制")) }
             let incoming = try BackupCodec.decode(Data(contentsOf: url))
             // Check current stores before offering a destructive replacement.
             _ = try backupSnapshot()
             let alert = NSAlert()
-            alert.messageText = "用备份替换全部统计数据？"
-            alert.informativeText = "包含 \(incoming.records.count) 条快捷键记录、\(incoming.hours.count) 条小时指标、\(incoming.interruptions.count) 条中断记录。恢复会替换现有数据，不会合并。开始前自动保存完整旧数据到本机 Backups 文件夹；完成后保持暂停。采集开关、隐藏列表及其他设置不变。"
+            alert.messageText = L10n.string("用备份替换全部统计数据？")
+            alert.informativeText = L10n.format("包含 %d 条快捷键记录、%d 条小时指标、%d 条中断记录。恢复会替换现有数据，不会合并。开始前自动保存完整旧数据到本机 Backups 文件夹；完成后保持暂停。采集开关、隐藏列表及其他设置不变。", incoming.records.count, incoming.hours.count, incoming.interruptions.count)
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "取消")
-            alert.addButton(withTitle: "备份当前数据并替换")
+            alert.addButton(withTitle: L10n.string("取消"))
+            alert.addButton(withTitle: L10n.string("备份当前数据并替换"))
             guard alert.runModal() == .alertSecondButtonReturn else { return }
             stop()
             let original = try backupSnapshot()
-            guard let activityStore else { throw BackupCodec.invalid("扩展统计数据库不可用") }
+            guard let activityStore else { throw BackupCodec.invalid(L10n.string("扩展统计数据库不可用")) }
             let restore = BackupRestore(directory: file.deletingLastPathComponent())
             do {
                 let safety = try restore.restore(incoming, original: original, store: activityStore)
@@ -632,9 +632,9 @@ final class Monitor: ObservableObject {
                 historyError = nil
                 activityRevision &+= 1
                 let done = NSAlert()
-                done.messageText = "恢复完成，统计已暂停"
-                done.informativeText = "确认数据后可点击“开始统计”。恢复前备份：\(safety.path)"
-                done.addButton(withTitle: "好")
+                done.messageText = L10n.string("恢复完成，统计已暂停")
+                done.informativeText = L10n.format("确认数据后可点击“开始统计”。恢复前备份：%@", safety.path)
+                done.addButton(withTitle: L10n.string("好"))
                 done.runModal()
             } catch {
                 if FileManager.default.fileExists(atPath: restore.journal.path) {
@@ -646,7 +646,7 @@ final class Monitor: ObservableObject {
                 }
                 throw error
             }
-        } catch { errorMessage = "恢复失败：\(error.localizedDescription)" }
+        } catch { errorMessage = L10n.format("恢复失败：%@", error.localizedDescription) }
     }
 
     static let keyNames: [Int64: String] = [

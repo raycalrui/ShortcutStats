@@ -28,7 +28,7 @@ struct ActivityDashboard: View {
                     summary("右键", value: total("mouse.right"), enabled: mouse)
                     summary("其他按钮", value: total("mouse.other"), enabled: mouse)
                 }
-                Text("移动：\(total("mouse.distance"), specifier: "%.0f") 事件单位 · 滚动：\(total("mouse.scroll.pixels"), specifier: "%.0f") 点 / \(total("mouse.scroll.lines"), specifier: "%.0f") 行")
+                Text(L10n.format("移动：%.0f 事件单位 · 滚动：%.0f 点 / %.0f 行", total("mouse.distance"), total("mouse.scroll.pixels"), total("mouse.scroll.lines")))
                 Text("移动不是实际物理距离；滚动分别累计水平和垂直绝对量，连续滚动包含惯性。")
                     .font(.caption).foregroundStyle(.secondary)
                 Divider()
@@ -45,7 +45,7 @@ struct ActivityDashboard: View {
                 if hours.isEmpty { Text("当前范围暂无此指标的小时数据。").foregroundStyle(.secondary) }
                 else {
                     Chart(hours, id: \.date) { point in
-                        BarMark(x: .value("小时", point.date), y: .value("用量", metric == "active.seconds" ? point.value / 60 : point.value))
+                        BarMark(x: .value(L10n.string("小时"), point.date), y: .value(L10n.string("用量"), metric == "active.seconds" ? point.value / 60 : point.value))
                     }.frame(height: 180)
                     ForEach(hours, id: \.date) { point in
                         HStack {
@@ -60,7 +60,7 @@ struct ActivityDashboard: View {
     }
     private func summary(_ title: String, value: Double, enabled: Bool) -> some View {
         VStack(alignment: .leading) {
-            Text(title).font(.caption)
+            Text(L10n.string(title)).font(.caption)
             Text(value.formatted(.number.precision(.fractionLength(0)))).font(.title2)
             if !enabled { Text("采集未开启").font(.caption2).foregroundStyle(.secondary) }
         }
@@ -84,19 +84,19 @@ struct AppUsageRankingView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("应用使用时长").font(.title2.bold())
                     Spacer()
-                    Text("合计 \(ActivityDisplay.duration(data.activeSeconds))")
+                    Text(L10n.format("合计 %@", ActivityDisplay.duration(data.activeSeconds)))
                         .font(.headline).monospacedDigit()
                 }
                 Text("按当前日期与应用范围统计前台活跃时长；占比以当前范围的总活跃时长为分母。")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("统计前台应用活跃时长", isOn: $active)
-                Text(active ? "采集已开启；60 秒无操作视为空闲，不累计锁屏、睡眠和暂停。" : "采集未开启；已有历史仍会显示，开启后开始累计新数据。")
+                Text(L10n.string(active ? "采集已开启；60 秒无操作视为空闲，不累计锁屏、睡眠和暂停。" : "采集未开启；已有历史仍会显示，开启后开始累计新数据。"))
                     .font(.caption).foregroundStyle(.secondary)
                 if data.appRankings.isEmpty {
                     ContentUnavailableView(
                         "暂无应用时长数据",
                         systemImage: "clock",
-                        description: Text(active ? "正常使用 Mac 后会出现数据，也可以调整上方日期与应用筛选。" : "开启活跃时长采集后，正常使用 Mac 即可开始累计。")
+                        description: Text(L10n.string(active ? "正常使用 Mac 后会出现数据，也可以调整上方日期与应用筛选。" : "开启活跃时长采集后，正常使用 Mac 即可开始累计。"))
                     ).frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 18) {
@@ -127,7 +127,7 @@ struct AppUsageRankingView: View {
             AppIdentityIcon(bundleID: app.id, size: 38)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(app.name).font(.headline).lineLimit(1).help(app.id)
+                    Text(L10n.localizedAppName(app.name)).font(.headline).lineLimit(1).help(app.id)
                     Spacer(minLength: 12)
                     Text(ActivityDisplay.duration(app.seconds)).monospacedDigit()
                     Text(app.share.formatted(.percent.precision(.fractionLength(1))))
@@ -136,7 +136,7 @@ struct AppUsageRankingView: View {
                 }
                 ProgressView(value: app.share, total: 1)
                     .tint(.blue)
-                    .accessibilityLabel("\(app.name) 占比")
+                    .accessibilityLabel(L10n.format("%@ 占比", L10n.localizedAppName(app.name)))
                     .accessibilityValue(app.share.formatted(.percent.precision(.fractionLength(1))))
             }
             Image(systemName: "chevron.right")
@@ -155,7 +155,7 @@ private final class AppIconCache {
     static let shared = AppIconCache()
 
     private var icons: [String: NSImage] = [:]
-    private let fallback = NSImage(systemSymbolName: "app", accessibilityDescription: "应用") ?? NSImage()
+    private let fallback = NSImage(systemSymbolName: "app", accessibilityDescription: L10n.string("应用")) ?? NSImage()
 
     func icon(for bundleID: String) -> NSImage {
         if let icon = icons[bundleID] { return icon }
@@ -302,7 +302,7 @@ private struct AppDetailView: View {
                         Text("每小时活跃趋势").font(.headline)
                         Spacer()
                         if let peak = hourlyPeak {
-                            Text("\(hourlyActivity.count) 个活跃小时 · 峰值 \(peakLabel(peak.hour))")
+                            Text(L10n.format("%d 个活跃小时 · 峰值 %@", hourlyActivity.count, peakLabel(peak.hour)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -314,22 +314,22 @@ private struct AppDetailView: View {
                         Chart {
                             ForEach(hourlyActivity, id: \.hour) { point in
                                 RectangleMark(
-                                    xStart: .value("小时开始", point.hour.addingTimeInterval(360)),
-                                    xEnd: .value("小时结束", point.hour.addingTimeInterval(3240)),
-                                    yStart: .value("起点", 0.0),
-                                    yEnd: .value("分钟", point.seconds / 60)
+                                    xStart: .value(L10n.string("小时开始"), point.hour.addingTimeInterval(360)),
+                                    xEnd: .value(L10n.string("小时结束"), point.hour.addingTimeInterval(3240)),
+                                    yStart: .value(L10n.string("起点"), 0.0),
+                                    yEnd: .value(L10n.string("分钟"), point.seconds / 60)
                                 )
                                 .cornerRadius(3)
                             }
 
                             if let hovered = hoveredActivity {
-                                RuleMark(x: .value("选中小时", hovered.hour.addingTimeInterval(1800)))
+                                RuleMark(x: .value(L10n.string("选中小时"), hovered.hour.addingTimeInterval(1800)))
                                     .foregroundStyle(.secondary.opacity(0.7))
                                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                                     .annotation(position: .top, spacing: 6) {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(hourRangeLabel(hovered.hour)).fontWeight(.semibold)
-                                            Text("活跃 \(ActivityDisplay.duration(hovered.seconds))")
+                                            Text(L10n.format("活跃 %@", ActivityDisplay.duration(hovered.seconds)))
                                                 .foregroundStyle(.secondary)
                                         }
                                         .font(.caption)
@@ -356,7 +356,7 @@ private struct AppDetailView: View {
                                     AxisTick()
                                     AxisValueLabel {
                                         if let date = value.as(Date.self) {
-                                            Text(date.formatted(.dateTime.month().day().hour()))
+                            Text(date.formatted(.dateTime.locale(AppLanguage.locale).month().day().hour()))
                                         }
                                     }
                                 }
@@ -388,7 +388,7 @@ private struct AppDetailView: View {
                             }
                         }
                         .frame(height: 150)
-                        .chartYAxisLabel("分钟")
+                        .chartYAxisLabel(L10n.string("分钟"))
                     }
 
                     Divider()
@@ -401,9 +401,9 @@ private struct AppDetailView: View {
                             ForEach(Array(topShortcuts.enumerated()), id: \.element.id) { index, shortcut in
                                 HStack(spacing: 12) {
                                     Text("\(index + 1)").foregroundStyle(.secondary).frame(width: 24, alignment: .trailing)
-                                    Text(shortcut.shortcut).font(.system(.body, design: .monospaced).bold())
+                                    Text(L10n.localizedShortcutName(shortcut.shortcut)).font(.system(.body, design: .monospaced).bold())
                                     Spacer()
-                                    Text("\(shortcut.count) 次").monospacedDigit().foregroundStyle(.secondary)
+                                    Text(L10n.format("%d 次", shortcut.count)).monospacedDigit().foregroundStyle(.secondary)
                                 }
                                 .padding(.vertical, 9)
                                 if index < topShortcuts.count - 1 { Divider() }
@@ -422,7 +422,7 @@ private struct AppDetailView: View {
 
     private func detailMetric(_ title: String, _ value: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: symbol).font(.caption).foregroundStyle(.secondary)
+            Label(L10n.string(title), systemImage: symbol).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.title3.bold()).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
@@ -431,18 +431,18 @@ private struct AppDetailView: View {
     }
 
     private func hourLabel(_ date: Date) -> String {
-        date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)))
+        date.formatted(.dateTime.locale(AppLanguage.locale).hour(.twoDigits(amPM: .omitted)))
     }
 
     private func hourRangeLabel(_ date: Date) -> String {
         let end = Calendar.current.date(byAdding: .hour, value: 1, to: date) ?? date.addingTimeInterval(3600)
         let range = "\(hourLabel(date)):00–\(hourLabel(end)):00"
-        return isSingleDayChart ? range : "\(date.formatted(.dateTime.month().day())) · \(range)"
+        return isSingleDayChart ? range : "\(date.formatted(.dateTime.locale(AppLanguage.locale).month().day())) · \(range)"
     }
 
     private func peakLabel(_ date: Date) -> String {
         let hour = "\(hourLabel(date)):00"
-        return isSingleDayChart ? hour : "\(date.formatted(.dateTime.month().day())) \(hour)"
+        return isSingleDayChart ? hour : "\(date.formatted(.dateTime.locale(AppLanguage.locale).month().day())) \(hour)"
     }
 }
 
@@ -466,7 +466,7 @@ struct StatisticsOverview: View {
                     metricCard("快捷键", value: data.shortcutCount.formatted(), symbol: "command", note: "组合键、独立 F 键与支持的系统键", enabled: nil)
                     metricCard("鼠标点击", value: ActivityDisplay.count(data.mouseClicks), symbol: "computermouse", note: "左键、右键与其他按钮合计", enabled: mouse)
                     metricCard("活跃时长", value: ActivityDisplay.duration(data.activeSeconds), symbol: "clock", note: "前台应用活跃时间合计", enabled: active)
-                    metricCard("最常用 App", value: data.appRankings.first?.name ?? "暂无数据", symbol: "app", note: data.appRankings.first.map { "按活跃时长 · \(ActivityDisplay.duration($0.seconds))" } ?? "以当前范围内的活跃时长排名", enabled: active)
+                    metricCard("最常用 App", value: data.appRankings.first.map { L10n.localizedAppName($0.name) } ?? L10n.string("暂无数据"), symbol: "app", note: data.appRankings.first.map { L10n.format("按活跃时长 · %@", ActivityDisplay.duration($0.seconds)) } ?? L10n.string("以当前范围内的活跃时长排名"), enabled: active)
                     let networkBytes = rows.filter { $0.metric == "network.download.bytes" || $0.metric == "network.upload.bytes" }.reduce(0) { $0 + $1.value }
                     metricCard("网络流量", value: ActivityDisplay.bytes(networkBytes), symbol: "network", note: "整机活动接口上传与下载合计", enabled: network)
                 }
@@ -486,11 +486,11 @@ struct StatisticsOverview: View {
 
     private func metricCard(_ title: String, value: String, symbol: String, note: String, enabled: Bool?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: symbol).font(.headline).foregroundStyle(.secondary)
+            Label(L10n.string(title), systemImage: symbol).font(.headline).foregroundStyle(.secondary)
             Text(value).font(.system(size: 27, weight: .semibold)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.6).help(value)
-            Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            Text(enabled.map { $0 ? "采集已开启" : "采集未开启 · 保留历史" } ?? "跟随顶部统计状态")
+            Text(L10n.string(note)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            Text(L10n.string(enabled.map { $0 ? "采集已开启" : "采集未开启 · 保留历史" } ?? "跟随顶部统计状态"))
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 125, alignment: .topLeading)
@@ -501,7 +501,7 @@ struct StatisticsOverview: View {
 
 private enum ActivityDisplay {
     static func bytes(_ value: Double) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
+        L10n.byteCount(value)
     }
 
     static func count(_ value: Double) -> String {
@@ -509,12 +509,6 @@ private enum ActivityDisplay {
     }
 
     static func duration(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds > 0 else { return "0 秒" }
-        let rounded = Int(min(seconds.rounded(.down), Double(Int.max / 2)))
-        if rounded < 60 { return rounded == 0 ? "不足 1 秒" : "\(rounded) 秒" }
-        let hours = rounded / 3600
-        let minutes = (rounded % 3600) / 60
-        if hours == 0 { return "\(minutes) 分钟" }
-        return minutes == 0 ? "\(hours) 小时" : "\(hours) 小时 \(minutes) 分钟"
+        L10n.duration(seconds)
     }
 }

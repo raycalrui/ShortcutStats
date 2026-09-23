@@ -5,13 +5,13 @@ enum TrackingState: String, Codable {
 
     var title: String {
         switch self {
-        case .recording: return "正在统计"
-        case .paused: return "手动暂停"
-        case .permission: return "等待输入监控权限"
-        case .secureInput: return "安全输入中 · 暂时无法统计"
-        case .sleeping: return "系统睡眠中"
-        case .fault: return "监听异常 · 正在重试"
-        case .dataError: return "历史数据读取失败 · 已停止统计"
+        case .recording: return L10n.string("正在统计")
+        case .paused: return L10n.string("手动暂停")
+        case .permission: return L10n.string("等待输入监控权限")
+        case .secureInput: return L10n.string("安全输入中 · 暂时无法统计")
+        case .sleeping: return L10n.string("系统睡眠中")
+        case .fault: return L10n.string("监听异常 · 正在重试")
+        case .dataError: return L10n.string("历史数据读取失败 · 已停止统计")
         }
     }
     var symbol: String {

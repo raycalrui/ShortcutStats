@@ -11,11 +11,11 @@ enum CalendarHeatmapMetric: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .shortcuts: "快捷键"
-        case .keys: "主键"
-        case .mouseClicks: "鼠标点击"
-        case .activeTime: "活跃时长"
-        case .networkTraffic: "网络流量"
+        case .shortcuts: L10n.string("快捷键")
+        case .keys: L10n.string("主键")
+        case .mouseClicks: L10n.string("鼠标点击")
+        case .activeTime: L10n.string("活跃时长")
+        case .networkTraffic: L10n.string("网络流量")
         }
     }
 }

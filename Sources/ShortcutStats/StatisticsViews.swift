@@ -14,15 +14,15 @@ struct RankingList: View {
                     ForEach(Array(ranking.enumerated()), id: \.element.id) { index, entry in
                         HStack(spacing: 12) {
                             Text(String(index + 1)).foregroundStyle(.secondary).frame(width: 30)
-                            Text(entry.shortcut).font(.system(.body, design: .monospaced).bold()).frame(width: 130, alignment: .leading)
+                            Text(L10n.localizedShortcutName(entry.shortcut)).font(.system(.body, design: .monospaced).bold()).frame(width: 130, alignment: .leading)
                             GeometryReader { geo in
                                 Capsule().fill(Color.accentColor.opacity(0.65))
                                     .frame(width: max(3, geo.size.width * Double(entry.count) / Double(ranking.first?.count ?? 1)))
                             }.frame(height: 9)
                             Text(entry.count.formatted()).monospacedDigit().frame(width: 70, alignment: .trailing)
                             Button { hide(entry.shortcut) } label: { Image(systemName: "eye.slash") }
-                                .buttonStyle(.borderless).help("隐藏 \(entry.shortcut)")
-                                .accessibilityLabel("隐藏 \(entry.shortcut)")
+                                .buttonStyle(.borderless).help(L10n.format("隐藏 %@", L10n.localizedShortcutName(entry.shortcut)))
+                                .accessibilityLabel(L10n.format("隐藏 %@", L10n.localizedShortcutName(entry.shortcut)))
                         }.padding(12).background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
@@ -47,16 +47,16 @@ struct UsageTrend: View {
     var body: some View {
         let points = series
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(records.reduce(0) { $0 + $1.count }) 次快捷键使用 · \(points.count) 天").font(.title3.bold())
+            Text(L10n.format("%d 次快捷键使用 · %d 天", records.reduce(0) { $0 + $1.count }, points.count)).font(.title3.bold())
             Text("按日期与应用筛选，不受排行榜搜索或隐藏项影响。0 表示没有记录，不代表全天都在采集。")
                 .font(.caption).foregroundStyle(.secondary)
             if records.isEmpty {
                 ContentUnavailableView("此范围没有记录", systemImage: "chart.bar")
             } else {
                 Chart(points) { point in
-                    BarMark(x: .value("日期", point.day), y: .value("次数", point.count))
+                    BarMark(x: .value(L10n.string("日期"), point.day), y: .value(L10n.string("次数"), point.count))
                         .foregroundStyle(Color.accentColor.gradient)
-                        .accessibilityLabel(point.day).accessibilityValue("\(point.count) 次")
+                        .accessibilityLabel(point.day).accessibilityValue(L10n.format("%d 次", point.count))
                 }
                 .chartXSelection(value: $selectedDay)
                 .chartXAxis {
@@ -64,11 +64,11 @@ struct UsageTrend: View {
                 }
                 .frame(minHeight: 160, maxHeight: 260)
                 if let point = points.first(where: { $0.day == selectedDay }) {
-                    Text("\(point.day)：\(point.count) 次").monospacedDigit()
+                    Text(L10n.format("%@：%d 次", point.day, point.count)).monospacedDigit()
                 } else { Text("点击图表查看某天，或在下面查看每日明细。").foregroundStyle(.secondary) }
             }
             List(points.reversed()) { point in
-                HStack { Text(point.day); Spacer(); Text("\(point.count) 次").monospacedDigit() }
+                HStack { Text(point.day); Spacer(); Text(L10n.format("%d 次", point.count)).monospacedDigit() }
             }.frame(minHeight: 80)
         }.frame(maxHeight: .infinity)
     }
@@ -90,9 +90,9 @@ struct KeyboardHeatmapSection: View {
             .frame(maxWidth: 300)
             if ordinaryKeys {
                 Toggle("采集全部主键", isOn: $keyboardEnabled)
-                Text(keyboardEnabled
+                Text(L10n.string(keyboardEnabled
                      ? "仅从开启后开始累计，不补算历史。包含普通打字和快捷键主键；只保存每小时次数，不保存文字或输入顺序。顶部暂停仍会停止采集。"
-                     : "全部主键采集已关闭，当前显示已有历史。开启后开始累计，不补算旧快捷键记录。")
+                     : "全部主键采集已关闭，当前显示已有历史。开启后开始累计，不补算旧快捷键记录。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             KeyboardHeatmap(records: ordinaryKeys ? ActivitySummary.keyRecords(from: rows) : records,
@@ -174,11 +174,11 @@ struct KeyboardHeatmap: View {
         }
     }
     private func keyTitle(_ key: String) -> String {
-        if !ordinaryKeys && key == "F11" { return "音量降低 / F11" }
-        if !ordinaryKeys && key == "F12" { return "音量增加 / F12" }
-        guard Statistics.modifierKeys.contains(key) else { return key }
-        let side = key.hasPrefix("L") ? "左" : key.hasPrefix("R") ? "右" : "左右未知"
-        return "\(key.dropFirst())（\(side)）"
+        if !ordinaryKeys && key == "F11" { return L10n.string("音量降低 / F11") }
+        if !ordinaryKeys && key == "F12" { return L10n.string("音量增加 / F12") }
+        guard Statistics.modifierKeys.contains(key) else { return L10n.localizedShortcutName(key) }
+        let side = key.hasPrefix("L") ? L10n.string("左") : key.hasPrefix("R") ? L10n.string("右") : L10n.string("左右未知")
+        return L10n.format("%@（%@）", String(key.dropFirst()), side)
     }
     private func recordKey(_ label: String) -> String {
         switch label { case "Tab": return "⇥"; case "Return": return "↩"; default: return label }
@@ -191,9 +191,9 @@ struct KeyboardHeatmap: View {
     }
     private func keyHelp(_ key: String, count: Int) -> String {
         if selectedModifier != nil && Statistics.modifierKeys.contains(key) && selectedModifier != key {
-            return "\(keyTitle(key))：点击切换筛选"
+            return L10n.format("%@：点击切换筛选", keyTitle(key))
         }
-        return "\(keyTitle(key))：\(count) 次"
+        return L10n.format("%@：%d 次", keyTitle(key), count)
     }
     private func select(_ key: String) {
         if Statistics.modifierKeys.contains(key) {
@@ -224,15 +224,15 @@ struct KeyboardHeatmap: View {
         let extras = Set(totals.keys).union(modifierExtras).filter { !$0.hasPrefix("?") && !keys.filter(\.tracked).map { recordKey($0) }.contains($0) }.sorted()
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(ordinaryKeys ? "主键按下热力图" : "快捷键热力图").font(.title3.bold())
-                Text(ordinaryKeys ? "物理主键按下次数，包含普通打字和快捷键；忽略长按重复，不代表输入字符数。修饰键不单独统计。顶部图标在此模式仅代表 F1–F12 按键，不含独立媒体/亮度事件。" : "统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。")
+                Text(L10n.string(ordinaryKeys ? "主键按下热力图" : "快捷键热力图")).font(.title3.bold())
+                Text(L10n.string(ordinaryKeys ? "物理主键按下次数，包含普通打字和快捷键；忽略长按重复，不代表输入字符数。修饰键不单独统计。顶部图标在此模式仅代表 F1–F12 按键，不含独立媒体/亮度事件。" : "统计快捷键中主键和修饰键的参与次数，不是全部打字量。左右修饰键独立统计；未提供左右信息的修饰键不显示，也不分配到两侧。顶部音量键合并展示音量操作与对应 F11/F12，点击查看各自明细；仅为展示分组，不代表事件来自该物理键。其他系统功能仍列在下方。Fn、Caps Lock 和锁定键不统计。"))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     if let modifier = selectedModifier {
-                        Text("正在筛选：\(keyTitle(modifier))").font(.headline).foregroundStyle(.orange)
+                        Text(L10n.format("正在筛选：%@", keyTitle(modifier))).font(.headline).foregroundStyle(.orange)
                         Button("取消筛选") { selectedModifier = nil; selectedKey = nil }
                     } else {
-                        Text(ordinaryKeys ? "点击主键查看次数" : "点击修饰键筛选，再次点击取消").foregroundStyle(.secondary)
+                        Text(L10n.string(ordinaryKeys ? "点击主键查看次数" : "点击修饰键筛选，再次点击取消")).foregroundStyle(.secondary)
                     }
                 }
                 if selectedModifier != nil {
@@ -258,8 +258,8 @@ struct KeyboardHeatmap: View {
                                     .overlay(RoundedRectangle(cornerRadius: 12 * scale).stroke((selectedKey == name || selectedModifier == name) && key.tracked ? keyColor : Color.secondary.opacity(0.25)))
                             }
                             .buttonStyle(.plain).disabled(!tracked)
-                            .help(tracked ? keyHelp(name, count: count) : "\(key.label)：不单独统计")
-                            .accessibilityLabel(tracked ? keyHelp(name, count: count) : "\(key.label)，不单独统计")
+                            .help(tracked ? keyHelp(name, count: count) : L10n.format("%@：不单独统计", key.label))
+                            .accessibilityLabel(tracked ? keyHelp(name, count: count) : L10n.format("%@，不单独统计", key.label))
                             .offset(x: key.x * scale, y: key.y * scale)
                         }
                     }
@@ -267,12 +267,12 @@ struct KeyboardHeatmap: View {
                 VStack(alignment: .leading, spacing: 6) {
                     colorLegend("主键", color: .blue, maximum: mainMaximum)
                     if !ordinaryKeys { colorLegend("修饰键", color: .orange, maximum: modifierMaximum) }
-                    Text(ordinaryKeys ? "浅色使用较少，深色使用较多。" : "两组独立色阶：浅色使用较少，深色使用较多；跨组深浅不代表相同次数。")
+                    Text(L10n.string(ordinaryKeys ? "浅色使用较少，深色使用较多。" : "两组独立色阶：浅色使用较少，深色使用较多；跨组深浅不代表相同次数。"))
                 }.font(.caption).foregroundStyle(.secondary)
                 if let key = selectedKey {
-                    Text("\(keyTitle(key))：\(totals[key, default: 0]) 次").font(.headline)
+                    Text(L10n.format("%@：%d 次", keyTitle(key), totals[key, default: 0])).font(.headline)
                     ForEach(Statistics.rankings(details(filteredRecords, key: key), since: "", appID: "")) { item in
-                        HStack { Text(item.shortcut); Spacer(); Text("\(item.count) 次") }
+                        HStack { Text(L10n.localizedShortcutName(item.shortcut)); Spacer(); Text(L10n.format("%d 次", item.count)) }
                     }
                 }
                 if !extras.isEmpty {
@@ -281,7 +281,7 @@ struct KeyboardHeatmap: View {
                         ForEach(extras, id: \.self) { key in keycap(key, label: keyTitle(key), count: totals[key, default: 0], peak: modifiers.contains(key) ? max(1, totals.filter { modifiers.contains($0.key) && !$0.key.hasPrefix("?") }.values.max() ?? 0) : peak) }
                     }
                 }
-                if filteredRecords.isEmpty { Text(selectedModifier == nil ? (ordinaryKeys ? "此范围没有主键记录。" : "此范围没有快捷键记录。") : "此范围没有使用该侧修饰键的记录。").foregroundStyle(.secondary) }
+                if filteredRecords.isEmpty { Text(L10n.string(selectedModifier == nil ? (ordinaryKeys ? "此范围没有主键记录。" : "此范围没有快捷键记录。") : "此范围没有使用该侧修饰键的记录。")).foregroundStyle(.secondary) }
             }.padding(.vertical, 8)
         }.frame(maxHeight: .infinity)
     }
@@ -291,13 +291,13 @@ struct KeyboardHeatmap: View {
     }
     private func colorLegend(_ title: String, color: Color, maximum: Int) -> some View {
         HStack {
-            Text(title).frame(width: 48, alignment: .leading)
+            Text(L10n.string(title)).frame(width: 48, alignment: .leading)
             Rectangle().fill(LinearGradient(stops: (0...40).map { step in
                 let position = Double(step) / 40
                 return Gradient.Stop(color: color.opacity(heatOpacity(position)), location: CGFloat(position))
             }, startPoint: .leading, endPoint: .trailing))
                 .frame(width: 110, height: 10)
-            Text("最高 \(maximum) 次")
+            Text(L10n.format("最高 %d 次", maximum))
         }
     }
     private func keycap(_ key: String, label: String? = nil, count: Int, peak: Int, height: CGFloat = 36) -> some View {

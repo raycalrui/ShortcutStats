@@ -32,7 +32,7 @@ struct QuickStatsView: View {
                                 .foregroundStyle(.tertiary)
                         }
                         Spacer()
-                        Text(chineseDate(context.date))
+                        Text(displayDate(context.date))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Label(monitor.status, systemImage: monitor.health.symbol)
@@ -47,7 +47,7 @@ struct QuickStatsView: View {
                     if showNetwork {
                         let download = rows(data: activityRows, metric: "network.download.bytes")
                         let upload = rows(data: activityRows, metric: "network.upload.bytes")
-                        metric("网络流量", value: "↓ \(bytes(download))  ↑ \(bytes(upload))", symbol: "network", enabled: network)
+                        metric("网络流量", value: "↓ \(L10n.byteCount(download))  ↑ \(L10n.byteCount(upload))", symbol: "network", enabled: network)
                     }
                     if showActive { VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -55,12 +55,12 @@ struct QuickStatsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer(minLength: 8)
-                            Text(data.appRankings.first?.name ?? "暂无数据")
+                            Text(data.appRankings.first.map { L10n.localizedAppName($0.name) } ?? L10n.string("暂无数据"))
                                 .font(.subheadline.weight(.semibold))
                                 .lineLimit(1)
                         }
                         if let app = data.appRankings.first {
-                            Text("按活跃时长 · \(duration(app.seconds)) · \(app.share.formatted(.percent.precision(.fractionLength(1))))")
+                            Text(L10n.format("按活跃时长 · %@ · %@", duration(app.seconds), app.share.formatted(.percent.locale(AppLanguage.locale).precision(.fractionLength(1)))))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         if !active { disabledLabel }
@@ -71,7 +71,7 @@ struct QuickStatsView: View {
                     }
                     Divider()
                     HStack {
-                        Button(monitor.wantsTracking ? "暂停统计" : "开始统计") {
+                        Button(L10n.string(monitor.wantsTracking ? "暂停统计" : "开始统计")) {
                             if monitor.wantsTracking { monitor.stop() } else { monitor.start() }
                         }
                         Spacer()
@@ -93,7 +93,7 @@ struct QuickStatsView: View {
     private func metric(_ title: String, value: String, symbol: String, enabled: Bool? = nil) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
-                Label(title, systemImage: symbol).foregroundStyle(.secondary)
+                Label(L10n.string(title), systemImage: symbol).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 Text(value).fontWeight(.semibold).monospacedDigit()
             }
@@ -111,21 +111,11 @@ struct QuickStatsView: View {
     private func rows(data: [HourMetric], metric: String) -> Double {
         data.filter { $0.metric == metric }.reduce(0) { $0 + $1.value }
     }
-    private func bytes(_ value: Double) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
-    }
-
-    private func chineseDate(_ date: Date) -> String {
-        date.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).month().day())
+    private func displayDate(_ date: Date) -> String {
+        date.formatted(.dateTime.locale(AppLanguage.locale).month().day())
     }
 
     private func duration(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds > 0 else { return "0 秒" }
-        let whole = Int(min(seconds.rounded(.down), Double(Int.max / 2)))
-        if whole < 60 { return whole == 0 ? "不足 1 秒" : "\(whole) 秒" }
-        let hours = whole / 3600
-        let minutes = (whole % 3600) / 60
-        if hours == 0 { return "\(minutes) 分钟" }
-        return minutes == 0 ? "\(hours) 小时" : "\(hours) 小时 \(minutes) 分钟"
+        L10n.duration(seconds)
     }
 }

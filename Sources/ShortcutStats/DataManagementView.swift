@@ -51,12 +51,12 @@ struct DataManagementView: View {
             Text("数据概况").font(.headline)
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
                 GridRow { Text("记录日期").foregroundStyle(.secondary); Text(dateRange(report)) }
-                GridRow { Text("快捷键").foregroundStyle(.secondary); Text("\(report.shortcutRows) 条聚合记录 · \(report.shortcutUses) 次使用") }
-                GridRow { Text("扩展小时数据").foregroundStyle(.secondary); Text("\(report.hourlyRows) 条聚合记录") }
-                GridRow { Text("普通主键 / 鼠标点击").foregroundStyle(.secondary); Text("\(whole(report.ordinaryKeyPresses)) / \(whole(report.mouseClicks)) 次") }
+                GridRow { Text("快捷键").foregroundStyle(.secondary); Text(L10n.format("%d 条聚合记录 · %d 次使用", report.shortcutRows, report.shortcutUses)) }
+                GridRow { Text("扩展小时数据").foregroundStyle(.secondary); Text(L10n.format("%d 条聚合记录", report.hourlyRows)) }
+                GridRow { Text("普通主键 / 鼠标点击").foregroundStyle(.secondary); Text(L10n.format("%@ / %@ 次", whole(report.ordinaryKeyPresses), whole(report.mouseClicks))) }
                 GridRow { Text("应用活跃时长").foregroundStyle(.secondary); Text(duration(report.activeSeconds)) }
-                GridRow { Text("网络流量").foregroundStyle(.secondary); Text("下载 \(bytes(report.downloadBytes)) · 上传 \(bytes(report.uploadBytes))") }
-                GridRow { Text("中断记录").foregroundStyle(.secondary); Text("\(report.interruptionRows) 条") }
+                GridRow { Text("网络流量").foregroundStyle(.secondary); Text(L10n.format("下载 %@ · 上传 %@", bytes(report.downloadBytes), bytes(report.uploadBytes))) }
+                GridRow { Text("中断记录").foregroundStyle(.secondary); Text(L10n.format("%d 条", report.interruptionRows)) }
             }
             Text("这里的数量是本机聚合记录，不包含输入正文、按键顺序、窗口标题或鼠标轨迹。")
                 .font(.caption).foregroundStyle(.secondary)
@@ -68,7 +68,7 @@ struct DataManagementView: View {
             HStack {
                 Text("存储占用").font(.headline)
                 Spacer()
-                Text(ByteCountFormatter.string(fromByteCount: report.totalBytes, countStyle: .file))
+                Text(L10n.byteCount(Double(report.totalBytes)))
                     .font(.headline).monospacedDigit()
             }
             ForEach(report.files) { file in
@@ -76,7 +76,7 @@ struct DataManagementView: View {
                     Text(file.title)
                     Text(file.id).font(.caption).foregroundStyle(.tertiary)
                     Spacer()
-                    Text(ByteCountFormatter.string(fromByteCount: file.bytes, countStyle: .file))
+                    Text(L10n.byteCount(Double(file.bytes)))
                         .foregroundStyle(.secondary).monospacedDigit()
                 }.font(.callout)
             }
@@ -120,8 +120,8 @@ struct DataManagementView: View {
     }
 
     private func dateRange(_ report: DataManagementReport) -> String {
-        guard let first = report.firstDay, let last = report.lastDay else { return "暂无记录" }
-        return first == last ? first : "\(first) 至 \(last)"
+        guard let first = report.firstDay, let last = report.lastDay else { return L10n.string("暂无记录") }
+        return first == last ? first : L10n.format("%@ 至 %@", first, last)
     }
 
     private func whole(_ value: Double) -> String {
@@ -129,15 +129,11 @@ struct DataManagementView: View {
     }
 
     private func bytes(_ value: Double) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(min(max(value, 0), Double(Int64.max))), countStyle: .file)
+        L10n.byteCount(value)
     }
 
     private func duration(_ seconds: Double) -> String {
-        let value = Int(min(max(seconds, 0), Double(Int.max / 2)))
-        if value < 60 { return "\(value) 秒" }
-        let hours = value / 3600
-        let minutes = value % 3600 / 60
-        return hours == 0 ? "\(minutes) 分钟" : "\(hours) 小时 \(minutes) 分钟"
+        L10n.duration(seconds)
     }
 
     private func initializeDates(_ report: DataManagementReport?) {

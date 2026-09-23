@@ -15,6 +15,6 @@ extension Monitor {
             panel.nameFieldStringValue = "\(stem)-\(from)-\(through).csv"
             guard panel.runModal() == .OK, let url = panel.url else { return }
             try content.write(to: url, atomically: true, encoding: .utf8)
-        } catch { errorMessage = "导出失败：\(error.localizedDescription)" }
+        } catch { errorMessage = L10n.format("导出失败：%@", error.localizedDescription) }
     }
 }

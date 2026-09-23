@@ -16,7 +16,7 @@ final class UpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
         super.init()
         // Local development identity must never be replaced by a public update.
         guard Bundle.main.bundleIdentifier == "cc.raycal.ShortcutStats" else {
-            startupError = "本机开发版通过 Xcode 构建更新，不接收公开安装包。"
+            startupError = L10n.string("本机开发版通过 Xcode 构建更新，不接收公开安装包。")
             return
         }
         controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
@@ -29,12 +29,12 @@ final class UpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
         do {
             try controller.updater.start()
         } catch {
-            startupError = "无法启动更新服务：\(error.localizedDescription)"
+            startupError = L10n.format("无法启动更新服务：%@", error.localizedDescription)
         }
     }
 
     var installedVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L10n.string("未知")
     }
 
     func checkForUpdates() {
@@ -59,7 +59,7 @@ struct UpdateSettings: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("软件更新").font(.headline)
             HStack {
-                Text("当前版本 \(updater.installedVersion)").foregroundStyle(.secondary)
+                Text(L10n.format("当前版本 %@", updater.installedVersion)).foregroundStyle(.secondary)
                 Spacer()
                 Button("检查更新…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
@@ -73,6 +73,7 @@ struct UpdateSettings: View {
                 .fixedSize(horizontal: false, vertical: true)
             if let error = updater.startupError {
                 Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

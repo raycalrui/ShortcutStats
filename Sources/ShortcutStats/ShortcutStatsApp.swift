@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = Monitor()
     private var statusSubscription: AnyCancellable?
     private var preferencesSubscription: AnyCancellable?
+    private var languageObserver: NSObjectProtocol?
     private var loginLaunch = false
     private let quickPopover = NSPopover()
 
@@ -42,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 920),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = Bundle.main.bundleIdentifier == "cc.raycal.ShortcutStats.local"
-            ? "ShortcutStats（本机开发版）" : "ShortcutStats"
+            ? L10n.string("ShortcutStats（本机开发版）") : "ShortcutStats"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 820, height: 820)
         window.contentView = NSHostingView(rootView: Dashboard(monitor: monitor))
@@ -52,6 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         preferencesSubscription = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in DispatchQueue.main.async { self?.updateStatusItem(state: self?.monitor.health) } }
+        languageObserver = NotificationCenter.default.addObserver(
+            forName: .shortcutStatsLanguageDidChange, object: nil, queue: .main
+        ) { [weak self] _ in self?.relaunchForLanguageChange() }
         _ = UpdateController.shared
         monitor.restoreTracking()
         if !loginLaunch { showWindow() }
@@ -105,6 +109,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
     func applicationWillTerminate(_ notification: Notification) { monitor.stop(persistPause: false) }
+
+    private func relaunchForLanguageChange() {
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+        helper.arguments = [
+            "-c",
+            "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.1; done; exec /usr/bin/open -- \"$2\"",
+            "shortcutstats-relaunch", String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath
+        ]
+        do {
+            try helper.run()
+            monitor.stop(persistPause: false)
+            NSApp.terminate(nil)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = L10n.string("无法重新启动 ShortcutStats")
+            alert.informativeText = L10n.format("语言偏好已保存。请手动退出并重新打开应用以完成切换。%@", error.localizedDescription)
+            alert.runModal()
+        }
+    }
+}
+
+private enum DashboardSection: String, CaseIterable, Identifiable {
+    case overview, ranking, appUsage, dailyTrend, calendarHeatmap, keyboardHeatmap, networkUsage, inputHourly
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .overview: L10n.string("导航：统计总览")
+        case .ranking: L10n.string("导航：排行榜")
+        case .appUsage: L10n.string("导航：应用时长")
+        case .dailyTrend: L10n.string("导航：每日趋势")
+        case .calendarHeatmap: L10n.string("导航：日历热力图")
+        case .keyboardHeatmap: L10n.string("导航：键盘热力图")
+        case .networkUsage: L10n.string("导航：网络流量")
+        case .inputHourly: L10n.string("导航：键鼠与小时")
+        }
+    }
 }
 
 struct Dashboard: View {
@@ -117,7 +159,7 @@ struct Dashboard: View {
     @State private var endDate = Date()
     @State private var selectedDay = Date()
     @State private var search = ""
-    @State private var section = "统计总览"
+    @State private var section = DashboardSection.overview
     @State private var showHidden = false
     @State private var showDataManagement = false
     @AppStorage("hiddenShortcuts") private var hiddenJSON = "[]"
@@ -179,7 +221,7 @@ struct Dashboard: View {
                         .font(.subheadline).foregroundStyle(monitor.running ? .green : .secondary)
                 }
                 Spacer()
-                Button(monitor.wantsTracking ? "暂停统计" : "开始统计") {
+                Button(L10n.string(monitor.wantsTracking ? "暂停统计" : "开始统计")) {
                     if monitor.wantsTracking { monitor.stop() } else { monitor.start() }
                 }
             }
@@ -213,7 +255,7 @@ struct Dashboard: View {
                     DatePicker("日期", selection: $selectedDay, in: ...Date(), displayedComponents: .date)
                         .labelsHidden().fixedSize()
                 } else {
-                    Text(days == 1 ? "今天" : "按天浏览").foregroundStyle(.secondary)
+                    Text(L10n.string(days == 1 ? "今天" : "按天浏览")).foregroundStyle(.secondary)
                 }
                 Button { moveDay(1) } label: { Image(systemName: "chevron.right") }
                     .disabled(!DayNavigation.canMoveForward(dayAnchor))
@@ -231,36 +273,38 @@ struct Dashboard: View {
                 }
             }
             Picker("统计视图", selection: $section) {
-                ForEach(["统计总览", "排行榜", "应用时长", "每日趋势", "日历热力图", "键盘热力图", "网络流量", "键鼠与小时"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented)
+                ForEach(DashboardSection.allCases) { item in Text(item.title).tag(item) }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: .infinity)
             if invalidRange {
                 ContentUnavailableView("日期范围无效", systemImage: "calendar", description: Text("开始日期不能晚于结束日期。"))
                     .frame(maxHeight: .infinity)
-            } else if section == "统计总览" {
+            } else if section == .overview {
                 StatisticsOverview(rows: selectedActivityRows, records: selectedRecords)
-            } else if section == "应用时长" {
+            } else if section == .appUsage {
                 AppUsageRankingView(rows: selectedActivityRows, records: selectedRecords)
-            } else if section == "排行榜" {
+            } else if section == .ranking {
                 HStack {
                     TextField("搜索组合键，例如 ⌘C 或 Space", text: $search)
                         .textFieldStyle(.roundedBorder)
-                    Button("已隐藏 (\(hidden.count))") { showHidden = true }
+                    Button(L10n.format("已隐藏 (%d)", hidden.count)) { showHidden = true }
                 }
                 HStack(spacing: 28) {
-                    Text("\(ranking.reduce(0) { $0 + $1.count }) 次使用").font(.title2.bold())
-                    Text("\(ranking.count) 个组合键 · 当前展示").foregroundStyle(.secondary)
+                    Text(L10n.format("%d 次使用", ranking.reduce(0) { $0 + $1.count })).font(.title2.bold())
+                    Text(L10n.format("%d 个组合键 · 当前展示", ranking.count)).foregroundStyle(.secondary)
                 }
                 RankingList(ranking: ranking) { shortcut in setHidden(hidden.union([shortcut])) }
-            } else if section == "每日趋势" {
+            } else if section == .dailyTrend {
                 UsageTrend(records: selectedRecords, from: since, through: through)
-            } else if section == "日历热力图" {
+            } else if section == .calendarHeatmap {
                 CalendarHeatmapView(records: calendarRecords, rows: calendarRows, selectedDay: $selectedDay) { date in
                     selectedDay = date
                     monitor.days = -2
                 }
-            } else if section == "网络流量" {
+            } else if section == .networkUsage {
                 NetworkUsageView(rows: networkRows)
-            } else if section == "键鼠与小时" {
+            } else if section == .inputHourly {
                 ActivityDashboard(rows: selectedActivityRows)
             } else {
                 KeyboardHeatmapSection(records: selectedRecords, rows: selectedActivityRows)
@@ -311,7 +355,7 @@ struct Dashboard: View {
                     Text("只影响排行榜和明确标注的排行榜导出；不删除记录，不影响趋势和热力图。")
                         .font(.caption).foregroundStyle(.secondary)
                     List(hidden.sorted(), id: \.self) { key in
-                        HStack { Text(key); Spacer(); Button("恢复显示") { setHidden(hidden.subtracting([key])) } }
+                        HStack { Text(L10n.localizedShortcutName(key)); Spacer(); Button("恢复显示") { setHidden(hidden.subtracting([key])) } }
                     }
                 }.padding(24).frame(width: 550, height: 360)
             }
@@ -327,7 +371,7 @@ struct Dashboard: View {
                     List(monitor.interruptions.reversed()) { gap in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(gap.reason.title)
-                            Text(gap.start.formatted() + " → " + (gap.end?.formatted() ?? "持续中 / 结束未知"))
+                            Text(gap.start.formatted(.dateTime.locale(AppLanguage.locale)) + " → " + (gap.end?.formatted(.dateTime.locale(AppLanguage.locale)) ?? L10n.string("持续中 / 结束未知")))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -350,33 +394,62 @@ private struct StartupSettings: View {
     @ObservedObject private var login = LoginItemController.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("设置").font(.title2.bold())
-            Toggle("登录时启动 ShortcutStats", isOn: Binding(
-                get: { login.enabled }, set: { login.setEnabled($0) }
-            ))
-            Text("登录后在菜单栏后台运行，不弹出主窗口。上次手动暂停后，重新启动仍保持暂停。")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(login.statusText).font(.callout)
-            if login.needsApproval {
-                Button("打开系统登录项设置") { SMAppService.openSystemSettingsLoginItems() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("设置").font(.title2.bold())
+                LanguageSettingsSection()
+                Divider()
+                Toggle("登录时启动 ShortcutStats", isOn: Binding(
+                    get: { login.enabled }, set: { login.setEnabled($0) }
+                ))
+                Text("登录后在菜单栏后台运行，不弹出主窗口。上次手动暂停后，重新启动仍保持暂停。")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(login.statusText).font(.callout)
+                if login.needsApproval {
+                    Button("打开系统登录项设置") { SMAppService.openSystemSettingsLoginItems() }
+                }
+                if let error = login.error {
+                    Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("建议先将 App 放到应用程序文件夹再开启，避免登录时运行构建目录中的旧副本。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Divider()
+                MenuBarSettingsSection()
+                Divider()
+                UpdateSettings()
             }
-            if let error = login.error {
-                Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
-            }
-            Text("建议先将 App 放到应用程序文件夹再开启，避免登录时运行构建目录中的旧副本。")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Divider()
-            MenuBarSettingsSection()
-            Divider()
-            UpdateSettings()
+            .padding(24)
         }
-        .padding(24).frame(width: 480)
+        .frame(width: 560, height: 650)
         .onAppear { login.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             login.refresh()
+        }
+    }
+}
+
+private struct LanguageSettingsSection: View {
+    @State private var language = AppLanguage.selected
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("语言").font(.headline)
+            Picker("应用语言", selection: $language) {
+                ForEach(AppLanguage.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            Text("默认跟随系统；简体中文系统显示中文，其他系统语言显示英文。更改后应用会自动重新启动。")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onChange(of: language) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            newValue.apply()
+            NotificationCenter.default.post(name: .shortcutStatsLanguageDidChange, object: nil)
         }
     }
 }
@@ -407,6 +480,7 @@ private struct MenuBarSettingsSection: View {
             }
             Text("菜单栏数字始终显示今天、全部应用的数据；快捷摘要也独立于主窗口筛选。")
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -425,11 +499,11 @@ private final class LoginItemController: ObservableObject {
         enabled = status == .enabled || status == .requiresApproval
         needsApproval = status == .requiresApproval
         switch status {
-        case .enabled: statusText = "已开启登录启动"
-        case .requiresApproval: statusText = "等待系统批准；请在登录项设置中允许 ShortcutStats。"
-        case .notRegistered: statusText = "未开启登录启动"
-        case .notFound: statusText = "系统无法找到应用，请从固定位置重新打开后再试。"
-        @unknown default: statusText = "无法确认登录启动状态"
+        case .enabled: statusText = L10n.string("已开启登录启动")
+        case .requiresApproval: statusText = L10n.string("等待系统批准；请在登录项设置中允许 ShortcutStats。")
+        case .notRegistered: statusText = L10n.string("未开启登录启动")
+        case .notFound: statusText = L10n.string("系统无法找到应用，请从固定位置重新打开后再试。")
+        @unknown default: statusText = L10n.string("无法确认登录启动状态")
         }
     }
 
@@ -444,7 +518,7 @@ private final class LoginItemController: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            self.error = "无法更新登录启动设置：\(error.localizedDescription)"
+            self.error = L10n.format("无法更新登录启动设置：%@", error.localizedDescription)
         }
         refresh()
     }

@@ -5,10 +5,10 @@ enum ActivityCSVKind: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .appTime: "应用活跃时长"
-        case .input: "键鼠每日统计"
-        case .network: "网络每日统计"
-        case .hourly: "每小时统计"
+        case .appTime: L10n.string("应用活跃时长")
+        case .input: L10n.string("键鼠每日统计")
+        case .network: L10n.string("网络每日统计")
+        case .hourly: L10n.string("每小时统计")
         }
     }
     var filename: String {
