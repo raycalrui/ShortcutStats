@@ -205,11 +205,13 @@ struct Dashboard: View {
         Statistics.filtered(selectedRecords, from: since, through: through, appID: appID, search: search, hidden: hidden)
     }
     private var ranking: [Ranking] { Statistics.rankings(visibleRecords, since: "", appID: "") }
-    private var apps: [(id: String, name: String)] {
-        var result: [String: String] = [:]
-        for record in monitor.records { result[record.appID] = record.appName }
-        for row in monitor.activityRows(from: "", through: "9999", appID: "") where row.appID != NetworkTracker.systemAppID { result[row.appID] = row.appName }
-        return result.map { (id: $0.key, name: $0.value) }.sorted { $0.name < $1.name }
+    private var apps: [AppFilterOption] {
+        Statistics.appFilterOptions(
+            records: monitor.records,
+            rows: monitor.activityRows(from: "", through: "9999", appID: ""),
+            from: since,
+            through: through
+        )
     }
 
     var body: some View {
@@ -236,7 +238,17 @@ struct Dashboard: View {
                 }.frame(width: 200)
                 Picker("应用", selection: $monitor.selectedAppID) {
                     Text("全部应用").tag("")
-                    ForEach(apps, id: \.id) { app in Text(app.name).tag(app.id) }
+                    ForEach(apps) { app in
+                        Label {
+                            Text(L10n.localizedAppName(app.name))
+                        } icon: {
+                            Image(nsImage: AppIconCache.shared.icon(for: app.id))
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 18, height: 18)
+                        }
+                        .tag(app.id)
+                    }
                 }.frame(maxWidth: 260)
                 Spacer()
                 Menu("导出 CSV") {

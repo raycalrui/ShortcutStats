@@ -209,6 +209,18 @@ check(overview.keyPresses == 10 && overview.shortcutCount == 10, "总览主键�
 check(overview.mouseClicks == 6, "总览鼠标点击包含三类按钮但排除移动和滚动")
 check(overview.activeSeconds == 120 && overview.appRankings.map(\.id) == ["a", "b"], "应用时长跨小时合并并降序排名")
 check(overview.appRankings.first?.name == "Renamed A" && overview.appRankings.first?.share == 0.75, "应用按ID归并、最新名称及占比正确")
+let filterApps = Statistics.appFilterOptions(
+    records: overviewLegacy + [UsageRecord(day: "2026-09-19", appID: "c", appName: "C", shortcut: "⌘V", count: 2)],
+    rows: overviewRows + [overviewMetric("active.seconds", 1000, app: "c", name: "C", hour: 7200),
+                          overviewMetric("active.seconds", .nan, app: "d", name: "D")],
+    from: "2026-09-20", through: "2026-09-20"
+)
+check(filterApps.map(\.id) == ["c", "a", "b", "d"] && filterApps.first?.activeSeconds == 1000,
+      "应用筛选按当前范围活跃时长排序，并保留无有效时长的历史应用")
+let filterAppsOutsideRange = Statistics.appFilterOptions(records: overviewLegacy, rows: overviewRows,
+                                                         from: "2026-09-21", through: "2026-09-21")
+check(filterAppsOutsideRange.map(\.id) == ["b", "a"] && filterAppsOutsideRange.allSatisfy { $0.activeSeconds == 0 },
+      "应用筛选切换日期范围后重新排序，保留历史应用")
 let emptyOverview = ActivitySummary(rows: [], records: [])
 check(emptyOverview.appRankings.isEmpty && emptyOverview.activeSeconds == 0 && emptyOverview.keyPresses == 0, "空总览无虚构排名或时长")
 let tiedOverview = ActivitySummary(rows: [overviewMetric("active.seconds", 30, app: "z"), overviewMetric("active.seconds", 30, app: "a")], records: [])

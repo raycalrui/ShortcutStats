@@ -151,7 +151,7 @@ struct AppUsageRankingView: View {
 /// Resolves installed application icons once and retains them only in memory.
 /// Bundle IDs are used as the cache key so applications with the same display name remain distinct.
 @MainActor
-private final class AppIconCache {
+final class AppIconCache {
     static let shared = AppIconCache()
 
     private var icons: [String: NSImage] = [:]

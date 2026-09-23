@@ -289,7 +289,11 @@ Overview is the default page. It shows main-key presses, shortcut uses, mouse cl
 
 「应用时长」提供独立排行榜，显示已安装应用的图标，按活跃时长降序排列，展示时长和占当前筛选范围总时长的比例。点击应用可查看该应用的活跃趋势、主键、快捷键和鼠标汇总以及常用快捷键 Top 10。支持顶部今天、近 7 天、近 30 天、全部和自定义日期；选择单个应用后占比以该筛选范围为准。它表示实际采集到的前台活跃时长，不是进程运行时间。
 
+顶部应用筛选菜单也显示 App 图标，并按当前日期范围内的活跃时长降序排列；没有该范围时长记录的历史 App 保留在末尾。
+
 App Time shows installed app icons and ranks apps by collected foreground active time. Click an app for its active-time trend, keyboard/shortcut/mouse totals and top 10 shortcuts. It supports Today, Last 7/30 Days, All and custom dates through the top filters. Selecting one app changes the share denominator accordingly. This measures observed active usage, not process uptime.
+
+The app filter menu also shows app icons and sorts by active time in the current date range. Apps without active-time records in that range remain available at the end.
 
 「日历热力图」按快捷键、主键、鼠标点击、活跃时长或网络流量展示最近约 12 个月的每日强度；点击日期会切换主窗口到该日。每种指标独立按可见峰值使用 10%–90%、Gamma＝2 的色阶。空白可能表示当时未开启采集，不代表全天为零。
 

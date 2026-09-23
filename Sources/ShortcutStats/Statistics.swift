@@ -7,6 +7,12 @@ struct AppActivityRanking: Identifiable {
     let share: Double
 }
 
+struct AppFilterOption: Identifiable {
+    let id: String
+    let name: String
+    let activeSeconds: Double
+}
+
 /// Presentation aggregates for an already date- and app-filtered range.
 /// Legacy shortcut totals and hourly input totals overlap and must never be added together.
 struct ActivitySummary {
@@ -73,6 +79,28 @@ struct Ranking: Identifiable {
 }
 
 enum Statistics {
+    static func appFilterOptions(records: [UsageRecord], rows: [HourMetric], from: String, through: String) -> [AppFilterOption] {
+        var names: [String: String] = [:]
+        for record in records where !record.appID.isEmpty { names[record.appID] = record.appName }
+        for row in rows where !row.appID.isEmpty && row.appID != NetworkTracker.systemAppID {
+            names[row.appID] = row.appName
+        }
+
+        var seconds: [String: Double] = [:]
+        for row in rows where row.metric == "active.seconds" && row.day >= from && row.day <= through
+            && row.value.isFinite && row.value > 0 && names[row.appID] != nil {
+            seconds[row.appID, default: 0] += row.value
+        }
+
+        return names.map { id, name in
+            AppFilterOption(id: id, name: name.isEmpty ? id : name, activeSeconds: seconds[id, default: 0])
+        }.sorted { lhs, rhs in
+            if lhs.activeSeconds != rhs.activeSeconds { return lhs.activeSeconds > rhs.activeSeconds }
+            let order = lhs.name.localizedStandardCompare(rhs.name)
+            return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+        }
+    }
+
     static func rankings(_ records: [UsageRecord], since: String, appID: String) -> [Ranking] {
         var totals: [String: Int] = [:]
         for record in records where record.day >= since && (appID.isEmpty || record.appID == appID) {
